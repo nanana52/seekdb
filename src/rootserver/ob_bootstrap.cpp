@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -149,7 +148,7 @@ bool ObBootstrap::TableIdCompare::operator() (const ObSimpleTableSchemaV2* left,
       if (left_data_table_id == right_table_id) {
         bret = true;
       } else {
-        bret = left_data_table_id < right_data_table_id;
+        bret = left_data_table_id < right_table_id;
       }
     } else {
       if (left_table_id == right_data_table_id) {
@@ -583,7 +582,7 @@ int ObBootstrap::publish_sys_schema(const ObSArray<ObTableSchema> &table_schemas
 }
 
 int ObBootstrap::batch_create_schema(ObDDLService &ddl_service,
-                                     ObIArray<share::schema::ObTableSchema> &table_schemas,
+                                     ObIArray<ObTableSchema> &table_schemas,
                                      const int64_t begin, const int64_t end)
 {
   int ret = OB_SUCCESS;
