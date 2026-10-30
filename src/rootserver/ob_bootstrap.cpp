@@ -17,11 +17,8 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
-#if defined(__EMSCRIPTEN__) || defined(_WIN32)
+#if defined(__EMSCRIPTEN__)
 #include "common/ob_timeout_ctx.h"
-#endif
-#ifdef _WIN32
-#include "share/ob_share_util.h"
 #endif
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
@@ -149,7 +146,7 @@ bool ObBootstrap::TableIdCompare::operator() (const ObSimpleTableSchemaV2* left,
       if (left_data_table_id == right_table_id) {
         bret = true;
       } else {
-        bret = left_data_table_id < right_data_table_id;
+        bret = left_data_table_id < right_table_id;
       }
     } else {
       if (left_table_id == right_data_table_id) {
@@ -285,7 +282,7 @@ int ObBootstrap::generate_table_schema_array_for_create_partition(
   if (OB_FAIL(table_schema_array.push_back(tschema))) {
   } else if (OB_FAIL(ObSysTableChecker::append_sys_table_index_schemas(
              table_id, table_schema_array))) {
-  } else if (OB_FAIL(add_sys_table_lob_aux_table(table_id, table_schema_array))) {
+  } else if (OB_FAIL(add_sys_table_lob_aux_table(data_table_id, table_schema_array))) {
   }
   return ret;
 }
@@ -306,7 +303,7 @@ int ObBootstrap::prepare_create_partitions(
     const uint64_t data_table_id = tschema.get_table_id();
 
     if (ObSysTableChecker::is_sys_table_has_index(data_table_id)
-        && OB_FAIL(ObSysTableChecker::get_sys_table_index_tids(data_table_id, index_tids))) {
+        && OB_FAIL(get_sys_table_lob_aux_table_id(data_table_id, lob_meta_table_id, lob_piece_table_id))) {
     } else if (!get_sys_table_lob_aux_table_id(data_table_id, lob_meta_table_id, lob_piece_table_id)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(table_schema_ptrs.push_back(&tschema))) {
@@ -338,7 +335,7 @@ int ObBootstrap::prepare_create_partitions(
     if (OB_SUCC(ret) && OB_FAIL(creator.add_create_tablets_of_tables_arg(
         table_schema_ptrs,
         DATA_CURRENT_VERSION,
-        need_create_empty_majors/*need_create_empty_major_sstable*/))) {
+        need_create_empty_majors/*need_tablet_cnt_check*/))) {
       LOG_ERROR("fail to add create tablet arg", KR(ret));
     }
   }
@@ -384,7 +381,7 @@ int ObBootstrap::prepare_create_partition(
     } else if (OB_FAIL(creator.add_create_tablets_of_tables_arg(
             table_schema_ptrs,
             DATA_CURRENT_VERSION,
-            need_create_empty_majors/*need_create_empty_major_sstable*/))) {
+            need_create_empty_majors/*need_tablet_cnt_check*/))) {
     }
   }
 
@@ -506,6 +503,8 @@ int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schem
                   "table_id", table_id);
               } else if (OB_HASH_NOT_EXIST == exist_ret) {
                 if (OB_FAIL(prepare_create_partitions(table_creator, table_schema, table_id_to_schema))) {
+                } else {
+                  LOG_INFO("succeed to create partition");
                 }
               } else {
                 ret = exist_ret;
@@ -676,15 +675,7 @@ int ObBootstrap::init_global_stat()
   int ret = OB_SUCCESS;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
-#ifdef _WIN32
-  // Give cold Windows bootstrap metadata operations an internal SQL timeout budget.
-  ObTimeoutCtx bootstrap_timeout_ctx;
-#endif
   if (OB_FAIL(check_inner_stat())) {
-#ifdef _WIN32
-  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(
-      bootstrap_timeout_ctx, config::internal_sql_execute_timeout()))) {
-#endif
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
     const SCN snapshot_gc_scn = SCN::min_scn();
@@ -768,7 +759,7 @@ int ObBootstrap::set_in_bootstrap()
     ObMultiVersionSchemaService &multi_schema_service = ddl_service_.get_schema_service();
     ObSchemaService *schema_service = multi_schema_service.get_schema_service();
     if (OB_ISNULL(schema_service)) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = OB_INVALID_ARGUMENT;
     } else {
       schema_service->set_cluster_schema_status(
           ObClusterSchemaStatus::BOOTSTRAP_STATUS);
