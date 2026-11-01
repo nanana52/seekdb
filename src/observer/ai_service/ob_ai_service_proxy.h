@@ -67,6 +67,23 @@ struct ObAiColumnTaskRow
   int64_t max_retries_;
 };
 
+// Conditional updates do not start or end a transaction. The worker must
+// generate a unique lease_token for EVERY claim and use database time in us.
+// These are catalog state transitions, not row-value publication.
+struct ObAiColumnTaskLease
+{
+  uint64_t table_id_;
+  uint64_t column_id_;
+  ObString request_id_;
+  int64_t definition_version_;
+  int64_t dependency_revision_;
+  ObString row_incarnation_;
+  ObString lease_owner_;
+  ObString lease_token_;
+  int64_t now_us_;
+  int64_t lease_deadline_us_;
+};
+
 class ObAiServiceProxy
 {
 public:
@@ -80,6 +97,21 @@ public:
       common::ObMySQLTransaction &trans, const ObAiColumnDefinitionRow &row);
   static int enqueue_ai_column_task_in_trans(
       common::ObMySQLTransaction &trans, const ObAiColumnTaskRow &row);
+  // Conditional, single-statement SQL transitions with CAS predicates.
+  // affected_rows=0 is a normal race/fence miss and sets the bool false.
+  static int try_claim_ai_column_task_in_trans(
+      common::ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+      bool &claimed);
+  static int stage_ai_column_success_in_trans(
+      common::ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+      const ObString &staged_result, int64_t result_type, bool &staged);
+  static int stage_ai_column_failure_in_trans(
+      common::ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+      bool retryable, int64_t next_due_us, int64_t error_code,
+      const ObString &error_message, bool &changed);
+  static int recover_expired_ai_column_task_in_trans(
+      common::ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+      int64_t next_due_us, bool &recovered);
   // ai endpoint
   static int insert_ai_endpoint(common::ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint);
   static int select_ai_endpoint(common::ObArenaAllocator &allocator, common::ObISQLClient &sql_proxy,

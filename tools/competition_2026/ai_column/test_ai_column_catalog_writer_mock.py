@@ -15,7 +15,7 @@ HDR = (ROOT / "src/observer/ai_service/ob_ai_service_proxy.h").read_text()
 
 A = "int ObAiServiceProxy::insert_ai_column_definition_in_trans("
 B = "int ObAiServiceProxy::enqueue_ai_column_task_in_trans("
-C = "int ObAiServiceProxy::insert_ai_endpoint("
+C = "int ObAiServiceProxy::try_claim_ai_column_task_in_trans("
 assert CPP.count(A) == CPP.count(B) == CPP.count(C) == 1
 methods = CPP[CPP.index(A):CPP.index(C)]
 structs = HDR[HDR.index("struct ObAiColumnDefinitionRow"):HDR.index("class ObAiServiceProxy")]

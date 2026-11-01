@@ -18,6 +18,7 @@
 #include "observer/ai_service/ob_ai_service_proxy.h"
 #include "share/ob_share_util.h"
 #include "share/ob_dml_sql_splicer.h"
+#include "share/ai_service/ob_ai_column_task_state.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_max_id_fetcher.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
@@ -112,6 +113,214 @@ int ObAiServiceProxy::enqueue_ai_column_task_in_trans(
   } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+// Claiming a task is a single conditional UPDATE; read-then-write is not safe
+// with concurrent workers.  The caller must supply a transaction scoped to
+// the catalog and fresh lease data, never a business DML transaction here.
+int ObAiServiceProxy::try_claim_ai_column_task_in_trans(
+    ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+    bool &claimed)
+{
+  int ret = OB_SUCCESS;
+  claimed = false;
+  int64_t affected_rows = 0;
+  ObSqlString sql;
+  if (!trans.is_started() || lease.table_id_ == 0 ||
+      lease.table_id_ == OB_INVALID_ID || lease.column_id_ == 0 ||
+      lease.column_id_ == OB_INVALID_ID || lease.request_id_.empty() ||
+      lease.request_id_.length() > 64 || lease.definition_version_ <= 0 ||
+      lease.dependency_revision_ <= 0 || lease.row_incarnation_.empty() ||
+      lease.row_incarnation_.length() > 64 || lease.lease_owner_.empty() ||
+      lease.lease_owner_.length() > 128 || lease.lease_token_.empty() ||
+      lease.lease_token_.length() > 64 || lease.now_us_ <= 0 ||
+      lease.lease_deadline_us_ <= lease.now_us_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql.assign_fmt(
+      "UPDATE __all_ai_column_task SET task_status = %d, "
+      "attempt_count = attempt_count + 1, lease_owner = ",
+      static_cast<int>(ai_column::TaskState::RUNNING)))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_owner_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(", lease_token = "))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_token_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      ", lease_deadline_us = %ld, next_due_us = 0 "
+      "WHERE table_id = %lu AND column_id = %lu AND request_id = ",
+      lease.lease_deadline_us_, lease.table_id_, lease.column_id_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.request_id_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND definition_version = %ld AND dependency_revision = %ld "
+      "AND row_incarnation = ",
+      lease.definition_version_, lease.dependency_revision_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND attempt_count < max_retries "
+      "AND (task_status = %d OR "
+      "(task_status = %d AND next_due_us <= %ld)) "
+      "AND (lease_token IS NULL OR lease_token <> ",
+      static_cast<int>(ai_column::TaskState::WAITING),
+      static_cast<int>(ai_column::TaskState::RETRY_WAIT), lease.now_us_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_token_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(")"))) {
+  } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+  } else if (affected_rows > 1 || affected_rows < 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    claimed = (affected_rows == 1);
+  }
+  return ret;
+}
+
+// Only the current owner with an unexpired lease may stage results. Staging
+// is NOT publication: the final user-row write needs a separate atomic group
+// transaction verifying the live row's generation and dependency revision.
+int ObAiServiceProxy::stage_ai_column_success_in_trans(
+    ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+    const ObString &staged_result, int64_t result_type, bool &staged)
+{
+  int ret = OB_SUCCESS;
+  staged = false;
+  int64_t affected_rows = 0;
+  ObSqlString sql;
+  if (!trans.is_started() || lease.table_id_ == 0 ||
+      lease.table_id_ == OB_INVALID_ID || lease.column_id_ == 0 ||
+      lease.column_id_ == OB_INVALID_ID || lease.request_id_.empty() ||
+      lease.request_id_.length() > 64 || lease.definition_version_ <= 0 ||
+      lease.dependency_revision_ <= 0 || lease.row_incarnation_.empty() ||
+      lease.row_incarnation_.length() > 64 || lease.lease_owner_.empty() ||
+      lease.lease_owner_.length() > 128 || lease.lease_token_.empty() ||
+      lease.lease_token_.length() > 64 || lease.now_us_ <= 0 || result_type < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql.assign_fmt(
+      "UPDATE __all_ai_column_task SET task_status = %d, "
+      "staged_result = ",
+      static_cast<int>(ai_column::TaskState::SUCCESS_STAGED)))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(nonnull_empty_string(staged_result), sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      ", result_type = %ld WHERE table_id = %lu AND column_id = %lu "
+      "AND request_id = ", result_type, lease.table_id_, lease.column_id_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.request_id_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND task_status = %d AND definition_version = %ld "
+      "AND dependency_revision = %ld AND row_incarnation = ",
+      static_cast<int>(ai_column::TaskState::RUNNING),
+      lease.definition_version_, lease.dependency_revision_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND lease_owner = "))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_owner_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND lease_token = "))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_token_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND lease_deadline_us > %ld", lease.now_us_))) {
+  } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+  } else if (affected_rows > 1 || affected_rows < 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    staged = (affected_rows == 1);
+  }
+  return ret;
+}
+
+// Model execution failed: stage a terminal error or schedule a retry, but
+// only if the caller still owns the live lease. Never mutate user-row values.
+int ObAiServiceProxy::stage_ai_column_failure_in_trans(
+    ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+    bool retryable, int64_t next_due_us, int64_t error_code,
+    const ObString &error_message, bool &changed)
+{
+  int ret = OB_SUCCESS;
+  changed = false;
+  int64_t affected_rows = 0;
+  ObSqlString sql;
+  if (!trans.is_started() || lease.table_id_ == 0 ||
+      lease.table_id_ == OB_INVALID_ID || lease.column_id_ == 0 ||
+      lease.column_id_ == OB_INVALID_ID || lease.request_id_.empty() ||
+      lease.request_id_.length() > 64 || lease.definition_version_ <= 0 ||
+      lease.dependency_revision_ <= 0 || lease.row_incarnation_.empty() ||
+      lease.row_incarnation_.length() > 64 || lease.lease_owner_.empty() ||
+      lease.lease_owner_.length() > 128 || lease.lease_token_.empty() ||
+      lease.lease_token_.length() > 64 || lease.now_us_ <= 0 ||
+      error_message.length() > 2048 || (retryable && next_due_us < lease.now_us_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql.assign_fmt(
+      "UPDATE __all_ai_column_task SET task_status = "
+      "CASE WHEN %d = 1 AND attempt_count < max_retries THEN %d ELSE %d END, "
+      "next_due_us = CASE WHEN %d = 1 AND attempt_count < max_retries THEN %ld ELSE 0 END, "
+      "error_code = %ld, error_message = ",
+      retryable ? 1 : 0,
+      static_cast<int>(ai_column::TaskState::RETRY_WAIT),
+      static_cast<int>(ai_column::TaskState::FAILURE_STAGED),
+      retryable ? 1 : 0, next_due_us, error_code))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(nonnull_empty_string(error_message), sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      ", lease_deadline_us = 0, lease_owner = NULL "
+      "WHERE table_id = %lu AND column_id = %lu AND request_id = ",
+      lease.table_id_, lease.column_id_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.request_id_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND task_status = %d AND definition_version = %ld "
+      "AND dependency_revision = %ld AND row_incarnation = ",
+      static_cast<int>(ai_column::TaskState::RUNNING),
+      lease.definition_version_, lease.dependency_revision_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND lease_owner = "))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_owner_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND lease_token = "))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_token_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND lease_deadline_us > %ld", lease.now_us_))) {
+  } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+  } else if (affected_rows > 1 || affected_rows < 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    changed = (affected_rows == 1);
+  }
+  return ret;
+}
+
+// Recover an expired RUNNING task in one statement. A capped-out attempt
+// stages failure so its group can eventually be atomically published.
+// Never clear the last lease token; it fences late/duplicate workers.
+int ObAiServiceProxy::recover_expired_ai_column_task_in_trans(
+    ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+    int64_t next_due_us, bool &recovered)
+{
+  int ret = OB_SUCCESS;
+  recovered = false;
+  int64_t affected_rows = 0;
+  ObSqlString sql;
+  if (!trans.is_started() || lease.table_id_ == 0 ||
+      lease.table_id_ == OB_INVALID_ID || lease.column_id_ == 0 ||
+      lease.column_id_ == OB_INVALID_ID || lease.request_id_.empty() ||
+      lease.request_id_.length() > 64 || lease.definition_version_ <= 0 ||
+      lease.dependency_revision_ <= 0 || lease.row_incarnation_.empty() ||
+      lease.row_incarnation_.length() > 64 || lease.now_us_ <= 0 ||
+      next_due_us < lease.now_us_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql.assign_fmt(
+      "UPDATE __all_ai_column_task SET "
+      "task_status = CASE WHEN attempt_count < max_retries THEN %d ELSE %d END, "
+      "next_due_us = %ld, lease_deadline_us = 0, lease_owner = NULL "
+      "WHERE table_id = %lu AND column_id = %lu AND request_id = ",
+      static_cast<int>(ai_column::TaskState::RETRY_WAIT),
+      static_cast<int>(ai_column::TaskState::FAILURE_STAGED),
+      next_due_us, lease.table_id_, lease.column_id_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.request_id_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND task_status = %d AND definition_version = %ld "
+      "AND dependency_revision = %ld AND row_incarnation = ",
+      static_cast<int>(ai_column::TaskState::RUNNING),
+      lease.definition_version_, lease.dependency_revision_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND lease_deadline_us > 0 AND lease_deadline_us <= %ld", lease.now_us_))) {
+  } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+  } else if (affected_rows > 1 || affected_rows < 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    recovered = (affected_rows == 1);
   }
   return ret;
 }
