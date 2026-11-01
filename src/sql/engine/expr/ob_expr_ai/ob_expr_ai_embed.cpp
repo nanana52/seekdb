@@ -29,6 +29,8 @@ namespace sql
 {
 namespace
 {
+// Bound each provider request even if SQL batch size is much larger.
+static const int64_t MAX_AI_EMBED_HTTP_BATCH_ROWS = 128;
 struct EmbeddingInputRow
 {
   EmbeddingInputRow() : row_(0), model_(), text_(), dimension_(0) {}
@@ -161,7 +163,8 @@ int ObExprAIEmbed::eval_ai_embed_batch(const ObExpr &expr, ObEvalCtx &ctx,
       const ObString model_name = rows.at(first).model_;
       const int64_t dim = rows.at(first).dimension_;
       for (int64_t j = first; OB_SUCC(ret) && j < rows.count(); ++j) {
-        if (!assigned.at(j) && rows.at(j).dimension_ == dim &&
+        if (contents.count() < MAX_AI_EMBED_HTTP_BATCH_ROWS &&
+            !assigned.at(j) && rows.at(j).dimension_ == dim &&
             rows.at(j).model_.compare(model_name) == 0) {
           if (OB_FAIL(contents.push_back(rows.at(j).text_))) {
           } else if (OB_FAIL(output_rows.push_back(rows.at(j).row_))) {

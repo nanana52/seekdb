@@ -21,6 +21,13 @@
 #include "sql/engine/expr/ob_expr_json_query.h"
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "sql/session/ob_sql_session_info.h"
+#include <cstdlib>
+#include <cstring>
+#include <limits.h>
+#include <sys/stat.h>
+#include <string>
+
 
 namespace oceanbase
 {
@@ -604,6 +611,16 @@ int ObJsonTableOp::inner_rescan()
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(reset_variable())) {
+  } else if (file_stream_active_) {
+    std::string detail;
+    if (!file_stream_cursor_.rescan(detail)) {
+      ret=OB_INVALID_ARGUMENT;
+      LOG_WARN("file stream rescan failed", "detail", detail.c_str());
+    } else {
+      file_stream_chunk_ready_=false;
+      file_stream_chunk_allocator_.reuse();
+      file_stream_json_.clear();
+    }
   }
   return ret;
 }
@@ -685,6 +702,12 @@ int ObJsonTableOp::init()
 int ObJsonTableOp::inner_close()
 {
   INIT_SUCC(ret);
+  file_stream_cursor_.close();
+  file_stream_chunk_allocator_.reuse();
+  file_stream_json_.clear();
+  file_stream_checked_=false;
+  file_stream_active_=false;
+  file_stream_chunk_ready_=false;
   if (OB_NOT_NULL(root_)) {
     if (OB_FAIL(root_->reset(&jt_ctx_))) {
     }
@@ -1397,10 +1420,153 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
   return ret;
 }
 
+// Runtime authorization is intentionally duplicated here: a client can use
+// JSON_TABLE directly, bypassing the SQL file-function rewrite. Never accept a
+// stream token without checking the active session and canonical file roots.
+static bool file_stream_sql_root(ObExecContext &exec_ctx,
+                                 std::string &open_root,
+                                 std::string &secure_root)
+{
+  auto *session=exec_ctx.get_my_session();
+  if (OB_ISNULL(session))return false;
+  const ObObj *enabled=session->get_user_variable_value(
+      ObString::make_string("__seekdb_file_sql_enabled"));
+  if (OB_ISNULL(enabled) || !enabled->is_int() || enabled->get_int()!=1)
+    return false;
+  ObObj secure_value;
+  if (session->get_sys_variable_by_name(
+        ObString::make_string("secure_file_priv"),secure_value)!=OB_SUCCESS ||
+      secure_value.is_null() || !secure_value.is_string_type())return false;
+  const ObString secure=secure_value.get_string();
+  if (secure.ptr()==nullptr || secure.length()==0)return false;
+  const std::string raw(secure.ptr(),static_cast<size_t>(secure.length()));
+  if(raw=="NULL" || raw=="null")return false;
+  char canonical[PATH_MAX]={};
+  struct stat st;
+  if(::realpath(raw.c_str(),canonical)==nullptr ||
+     ::stat(canonical,&st)!=0 || !S_ISDIR(st.st_mode))return false;
+  secure_root=canonical;
+  const char *override_root=std::getenv("SEEKDB_FILE_SQL_ROOT");
+  open_root=(override_root!=nullptr && *override_root!='\0')?
+      override_root:secure_root;
+  return true;
+}
+
+static bool file_stream_under_root(const std::string &root,
+                                   const std::string &filename)
+{
+  if(root=="/")return filename.size()>1 && filename[0]=='/';
+  return filename.size()>root.size() &&
+         filename.compare(0,root.size(),root)==0 &&
+         filename[root.size()]=='/';
+}
+
+int ObJsonTableOp::maybe_open_file_stream()
+{
+  INIT_SUCC(ret);
+  if(file_stream_checked_)return ret;
+  file_stream_checked_=true;
+  if(MY_SPEC.value_exprs_.empty())return ret;
+  ObExpr *expr=MY_SPEC.value_exprs_.at(0);
+  if(expr==nullptr || !ob_is_string_type(expr->datum_meta_.type_))return ret;
+  ObString text;
+  bool is_null=false;
+  MultimodeAlloctor alloc(jt_ctx_.row_alloc_);
+  if(OB_FAIL(ObJsonExprHelper::get_json_or_str_data(expr,eval_ctx_,
+                                                    alloc,text,is_null))) {
+  } else if(!is_null) {
+    const std::string token(text.ptr(),static_cast<size_t>(text.length()));
+    if(!file_stream::is_stream_token(token))return ret;
+    std::string filename,open_root,secure_root,detail;
+    file_stream::FileFormat format=file_stream::CSV;
+    bool header=true;
+    if(!file_stream::parse_stream_token(token,filename,format,header)) {
+      ret=OB_INVALID_ARGUMENT;
+    } else if(!file_stream_sql_root(get_exec_ctx(),open_root,secure_root)) {
+      ret=OB_NOT_SUPPORTED;
+    } else {
+      file_stream::StreamOptions options;
+      options.format=format;
+      options.header=header;
+      options.max_batch_rows=16;
+      if(!file_stream_cursor_.open(open_root,filename,options,
+                                   std::vector<std::string>(),detail)) {
+        ret=OB_INVALID_ARGUMENT;
+        LOG_WARN("stream file access rejected", "detail",detail.c_str());
+      } else if(!file_stream_under_root(secure_root,
+                                      file_stream_cursor_.canonical_path())) {
+        file_stream_cursor_.close();
+        ret=OB_NOT_SUPPORTED;
+      } else {
+        file_stream_active_=true;
+        file_stream_chunk_ready_=false;
+        file_stream_json_.clear();
+      }
+    }
+  }
+  return ret;
+}
+
+int ObJsonTableOp::next_file_stream_row()
+{
+  INIT_SUCC(ret);
+  bool row_null=false;
+  while(OB_SUCC(ret)) {
+    if(file_stream_chunk_ready_) {
+      clear_evaluated_flag();
+      ret=root_->get_next_row(input_,&jt_ctx_,row_null);
+      if(ret==OB_SUCCESS)return ret;
+      if(ret!=OB_ITER_END)return ret;
+      ret=OB_SUCCESS;
+      if(OB_FAIL(root_->reset(&jt_ctx_)))return ret;
+      file_stream_chunk_ready_=false;
+      jt_ctx_.is_cover_error_=false;
+      jt_ctx_.is_need_end_=false;
+    }
+    file_stream::ScanBatch batch;
+    std::string detail;
+    if(!file_stream_cursor_.next_batch(batch,16,detail)) {
+      ret=OB_INVALID_ARGUMENT;
+      LOG_WARN("file stream next batch failed", "detail",detail.c_str());
+      return ret;
+    }
+    if(batch.rows.empty())return OB_ITER_END;
+    if(!file_stream::scan_batch_as_json(
+        batch,file_stream_cursor_.projected_names(),
+        file_stream_json_,detail)) {
+      ret=OB_INVALID_ARGUMENT;
+      LOG_WARN("file stream JSON batch invalid", "detail",detail.c_str());
+      return ret;
+    }
+    file_stream_chunk_allocator_.reuse();
+    MultimodeAlloctor tmp(file_stream_chunk_allocator_);
+    ObIJsonBase *json_input=nullptr;
+    ObString json_text=ObString::make_string(file_stream_json_.c_str());
+    if(OB_FAIL(ObJsonBaseFactory::get_json_base(
+        &tmp,json_text,
+        ObJsonExprHelper::get_json_internal_type(ObLongTextType),
+        ObJsonInType::JSON_TREE,json_input,
+        ObJsonParser::JSN_DEFAULT_FLAG,
+        ObJsonExprHelper::get_json_max_depth_config()))) {
+      LOG_WARN("file stream chunk JSON parsing failed",K(ret));
+    } else if(json_input==nullptr ||
+              json_input->json_type()!=ObJsonNodeType::J_ARRAY) {
+      ret=OB_ERR_JSON_SYNTAX_ERROR;
+    } else {
+      reset_columns();
+      input_=json_input;
+      file_stream_chunk_ready_=true;
+    }
+  }
+  return ret;
+}
+
 // json/xml table function inner
 int ObJsonTableOp::inner_get_next_row()
 {
   INIT_SUCC(ret);
+  if(OB_FAIL(maybe_open_file_stream()))return ret;
+  if(file_stream_active_)return next_file_stream_row();
   bool is_root_null = false;
   if (!(jt_ctx_.is_json_table_func()
         || jt_ctx_.is_unnest_table_func())) {

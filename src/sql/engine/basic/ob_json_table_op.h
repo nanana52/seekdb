@@ -18,6 +18,8 @@
 #define OCEANBASE_BASIC_OB_JSON_TABLE_OP_H_
 
 #include "sql/engine/ob_operator.h"
+#include "sql/engine/basic/ob_file_scan_core.h"
+#include <string>
 #include "lib/charset/ob_charset.h"
 #include "common/json_type/ob_json_tree.h"
 #include "common/json_type/ob_json_base.h"
@@ -197,7 +199,13 @@ public:
       input_(nullptr),
       j_null_(),
       j_arr_(allocator_),
-      j_obj_(allocator_)
+      j_obj_(allocator_),
+      file_stream_checked_(false),
+      file_stream_active_(false),
+      file_stream_chunk_ready_(false),
+      file_stream_cursor_(),
+      file_stream_chunk_allocator_(),
+      file_stream_json_()
   {
     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec);
     col_count_ = spec_ptr->column_exprs_.count();
@@ -228,6 +236,8 @@ private:
   int generate_table_exec_tree(ObIAllocator* allocator, const JtColTreeNode& orig_col,
                                JoinNode*& join_col);
   int inner_get_next_row_jt();  // json table function inner
+  int maybe_open_file_stream(); // only for a validated file SQL transport token
+  int next_file_stream_row();
 
 private:
   JtColTreeNode* def_root_;
@@ -246,6 +256,14 @@ private:
   ObJsonNull j_null_;
   ObJsonArray j_arr_;
   ObJsonObject j_obj_;
+  // Reuse JSON_TABLE's established SQL plan and casting semantics, while
+  // supplying at most 16 file rows of JSON at a time to its row iterator.
+  bool file_stream_checked_;
+  bool file_stream_active_;
+  bool file_stream_chunk_ready_;
+  file_stream::NativeFileScanCursor file_stream_cursor_;
+  common::ObArenaAllocator file_stream_chunk_allocator_;
+  std::string file_stream_json_;
 };
 
 class MulModeTableFunc {

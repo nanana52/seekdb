@@ -3,8 +3,9 @@
  *
  * The adapter rewrites FROM/JOIN read_csv/read_json/read_ndjson/glob into
  * JSON_TABLE source nodes, so relational operations remain inside seekdb.
- * It is deliberately bounded (2 MiB JSON materialization), not the final
- * streaming/Parquet/COPY implementation.
+ * CSV/JSONL use a bounded per-chunk stream in the existing JSON_TABLE
+ * executor. JSON arrays, Parquet, glob, and parts of COPY remain limited
+ * to 2 MiB materialization; a dedicated PHY_FILE_SCAN is not yet implemented.
  *
  * Access is opt-in: all resolved files must be below SEEKDB_FILE_SQL_ROOT,
  * or /tmp/seekdb-file-sql when the variable is unset. Canonical paths are
@@ -27,6 +28,7 @@
 #include <vector>
 #include <cstdint>
 #include <cstdio>
+#include "sql/engine/basic/ob_file_scan_core.h"
 
 namespace oceanbase {
 namespace sql {
@@ -1691,6 +1693,46 @@ inline bool source_sql(const std::string &type,const std::string &path,
                        std::vector<std::string> *returned_types=nullptr) {
   std::string doc;
   std::vector<std::string> names,types;
+  // CSV and newline-delimited JSON use a bounded native streaming source.
+  // The marker is only a transport envelope; the physical executor rechecks
+  // SQL-session permission and the canonical file root before opening it.
+  const std::string extension=lower(path);
+  const bool newline_json=(type=="read_ndjson" ||
+      (type=="read_json" && (opts.json_newlines ||
+        (extension.size()>=6 && extension.substr(extension.size()-6)==".jsonl") ||
+        (extension.size()>=7 && extension.substr(extension.size()-7)==".ndjson"))));
+  if(type=="read_csv" || newline_json) {
+    std::string root;
+    if(!permitted_root(root,err))return false;
+    file_stream::StreamOptions scan_options;
+    scan_options.format=type=="read_csv"?file_stream::CSV:file_stream::JSONL;
+    scan_options.header=opts.csv_header;
+    file_stream::NativeFileScanCursor cursor;
+    if(!cursor.open(root,path,scan_options,std::vector<std::string>(),err))return false;
+    if(!secured_file_path(cursor.canonical_path())) {
+      err="file is outside the SQL session's secure file root";return false;
+    }
+    names=cursor.schema().names;
+    for(size_t i=0;i<cursor.schema().types.size();++i) {
+      types.push_back(file_stream::NativeFileScanCursor::sql_type(
+          cursor.schema().types[i]));
+    }
+    std::string token;
+    if(!file_stream::make_stream_token(cursor.canonical_path(),
+                                     scan_options.format,scan_options.header,token)) {
+      err="file path cannot be encoded in stream token";return false;
+    }
+    if(returned_names!=nullptr)*returned_names=names;
+    if(returned_types!=nullptr)*returned_types=types;
+    target="JSON_TABLE("+sql_quote(token)+", '$[*]' COLUMNS (";
+    for(size_t i=0;i<names.size();++i) {
+      if(i)target+=", ";
+      target+=sql_identifier(names[i])+" "+types[i]+" PATH "+
+              sql_quote("$."+json_quote(names[i]));
+    }
+    target+="))";
+    return true;
+  }
   if(type=="glob") {
     if(!glob_to_json(path,doc,err))return false;
     names.push_back("file");
@@ -2222,7 +2264,30 @@ inline bool rewrite_describe_file(const std::string &sql,std::string &out,
   }
   std::string source;
   std::vector<std::string> names,types;
-  if(!source_sql(function,path,options,source,err,&names,&types))return false;
+  const std::string suffix=lower(path);
+  const bool newline_json = function=="read_ndjson" || options.json_newlines ||
+      (function=="read_json" &&
+        ((suffix.size()>=6 && suffix.substr(suffix.size()-6)==".jsonl") ||
+         (suffix.size()>=7 && suffix.substr(suffix.size()-7)==".ndjson")));
+  if(function=="read_csv" || newline_json) {
+    // Streaming schema discovery is safe for >2 MiB files. Ordinary SELECT
+    // still uses the bounded JSON_TABLE rewrite and remains explicitly limited.
+    std::string root;
+    if(!permitted_root(root,err))return false;
+    file_stream::StreamOptions scan_options;
+    scan_options.format=function=="read_csv"?file_stream::CSV:file_stream::JSONL;
+    scan_options.header=options.csv_header;
+    file_stream::NativeFileScanCursor cursor;
+    if(!cursor.open(root,path,scan_options,std::vector<std::string>(),err))return false;
+    if(!secured_file_path(cursor.canonical_path())) {
+      err="file is outside the session's secure file root";return false;
+    }
+    const file_stream::ScanSchema &schema=cursor.schema();
+    names=schema.names;
+    for(size_t i=0;i<schema.types.size();++i) {
+      types.push_back(file_stream::NativeFileScanCursor::sql_type(schema.types[i]));
+    }
+  } else if(!source_sql(function,path,options,source,err,&names,&types))return false;
   if(names.empty() || names.size()!=types.size()){
     err="file table has no describable columns";return false;
   }
