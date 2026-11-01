@@ -53,7 +53,7 @@ inline bool make_stream_token(const std::string &absolute_path,
     hex.push_back(hexdigits[byte&15]);
   }
   token="[{\"__seekdb_native_file_scan_v1__\":\""+hex+
-        "\",\"format\":\""+(format==CSV?"csv":"jsonl")+
+        "\",\"format\":\""+(format==CSV?"csv":format==JSONL?"jsonl":"json_array")+
         "\",\"header\":"+(header?"1":"0")+"}]";
   return true;
 }
@@ -82,6 +82,10 @@ inline bool parse_stream_token(const std::string &token,
     format=JSONL;header=true;
   }else if(suffix=="\",\"format\":\"jsonl\",\"header\":0}]") {
     format=JSONL;header=false;
+  }else if(suffix=="\",\"format\":\"json_array\",\"header\":1}]") {
+    format=JSON_ARRAY;header=true;
+  }else if(suffix=="\",\"format\":\"json_array\",\"header\":0}]") {
+    format=JSON_ARRAY;header=false;
   }else return false;
   path.clear();path.reserve((stop-prefix.size())/2);
   for(size_t i=prefix.size();i<stop;i+=2) {

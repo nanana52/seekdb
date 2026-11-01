@@ -1776,6 +1776,16 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
   bool is_modify_column = stmt::T_ALTER_TABLE == stmt_->get_stmt_type()
                   && OB_DDL_MODIFY_COLUMN == (static_cast<AlterColumnSchema &>(column)).alter_type_;
   ParseNode *column_definition_ref_node = NULL;
+  // AI COLUMN is syntactically recognized, but it must never degrade into an
+  // ordinary nullable field before durable outbox + worker wiring is ready.
+  // DDL acceptance without commit-consistent task writes would silently lose
+  // AI results after crashes and violate transaction rollback semantics.
+  if (OB_NOT_NULL(node) && T_COLUMN_DEFINITION == node->type_ &&
+      AI_COLUMN_DEFINITION_NUM_CHILD == node->num_child_) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI COLUMN requires durable outbox and worker");
+    return ret;
+  }
   if (T_COLUMN_DEFINITION != node->type_ || node->num_child_ < COLUMN_DEFINITION_NUM_CHILD ||
      OB_ISNULL(allocator_) || OB_ISNULL(node->children_) || OB_ISNULL(node->children_[0]) ||
      T_COLUMN_REF != node->children_[0]->type_ ||

@@ -25,7 +25,7 @@ struct FileBatch {
   std::vector<std::vector<std::string> > rows;
   void clear() { rows.clear(); }
 };
-enum FileFormat { CSV, JSONL };
+enum FileFormat { CSV, JSONL, JSON_ARRAY };
 
 struct StreamOptions {
   FileFormat format;
@@ -41,7 +41,8 @@ struct StreamOptions {
 class FileStreamReader {
 public:
   FileStreamReader():fd_(-1),first_(0),last_(0),eof_(false),consumed_(false),
-     bytes_returned_(0),first_row_pending_(false),identity_(),opts_() {}
+     bytes_returned_(0),first_row_pending_(false),array_after_item_(false),
+     array_closed_(false),identity_(),opts_() {}
   ~FileStreamReader() { close(); }
   FileStreamReader(const FileStreamReader &)=delete;
   FileStreamReader &operator=(const FileStreamReader &)=delete;
@@ -49,7 +50,9 @@ public:
   bool open(const std::string &allowed_root,const std::string &filename,
             const StreamOptions &options,std::string &err) {
     close();
-    if(options.max_columns==0 || options.max_columns>1024 ||
+    if((options.format!=CSV && options.format!=JSONL &&
+        options.format!=JSON_ARRAY) ||
+       options.max_columns==0 || options.max_columns>1024 ||
        options.max_field_bytes==0 || options.max_field_bytes>(1u<<20) ||
        options.max_row_bytes<options.max_field_bytes ||
        options.max_row_bytes>(16u<<20) ||
@@ -109,6 +112,8 @@ public:
         bool has_row=false;
         if(opts_.format==CSV) {
           if(!csv_row(row,has_row,err))return false;
+        } else if(opts_.format==JSON_ARRAY) {
+          if(!json_array_row(row,has_row,err))return false;
         } else {
           if(!jsonl_row(row,has_row,err))return false;
         }
@@ -136,6 +141,7 @@ public:
   void close() {
     if(fd_>=0)::close(fd_);
     fd_=-1;first_=last_=0;eof_=consumed_=false;
+    array_after_item_=array_closed_=false;
     first_row_pending_=false;
     bytes_returned_=0;
     root_.clear();path_.clear();
@@ -213,6 +219,7 @@ private:
       err="file cannot be rewound";return false;
     }
     first_=last_=0;eof_=consumed_=false;
+    array_after_item_=array_closed_=false;
     first_row_pending_=false;pending_row_.clear();column_names_.clear();
     bytes_returned_=0;
     if(opts_.format==CSV) {
@@ -250,7 +257,80 @@ private:
           column_names_.push_back("column"+std::to_string(i));
       }
     }
+    if(opts_.format==JSON_ARRAY) {
+      // The array envelope is read incrementally; never materialize the file.
+      int c=-1;
+      if(!array_skip_ws(c,err))return false;
+      if(c!='[') {err="JSON array must start with '['";return false;}
+      (void)consume(err);
+    }
     return check_same_file(err);
+  }
+
+  bool array_skip_ws(int &c,std::string &err) {
+    for(;;) {
+      c=peek(err);
+      if(c==-2)return false;
+      if(c<0 || !is_space(static_cast<char>(c)))return true;
+      (void)consume(err);
+    }
+  }
+
+  bool json_array_row(std::vector<std::string> &row,bool &has_row,
+                      std::string &err) {
+    row.clear();has_row=false;
+    if(array_closed_)return true;
+    int c=-1;
+    if(!array_skip_ws(c,err))return false;
+    if(array_after_item_) {
+      if(c==']') {
+        (void)consume(err);
+        array_closed_=consumed_=true;
+        if(!array_skip_ws(c,err))return false;
+        if(c!=-1) {err="JSON array has trailing content";return false;}
+        return true;
+      }
+      if(c!=',') {err="JSON array requires a comma";return false;}
+      (void)consume(err);
+      if(!array_skip_ws(c,err))return false;
+    } else if(c==']') {
+      (void)consume(err);
+      array_closed_=consumed_=true;
+      if(!array_skip_ws(c,err))return false;
+      if(c!=-1) {err="JSON array has trailing content";return false;}
+      return true;
+    }
+    if(c!='{') {err="JSON array requires flat JSON objects";return false;}
+    std::string object;
+    bool quoted=false,escaped=false;
+    int depth=0;
+    for(;;) {
+      c=consume(err);
+      if(c==-2)return false;
+      if(c==-1) {err="unterminated JSON array object";return false;}
+      if(object.size()>=opts_.max_row_bytes) {
+        err="JSON array object exceeds row limit";return false;
+      }
+      const char v=static_cast<char>(c);
+      object.push_back(v);
+      if(quoted) {
+        if(escaped)escaped=false;
+        else if(v=='\\')escaped=true;
+        else if(v=='"')quoted=false;
+      } else if(v=='"')quoted=true;
+      else if(v=='{')++depth;
+      else if(v=='}') {
+        if(--depth==0)break;
+        if(depth<0) {err="JSON array has unmatched brace";return false;}
+      }
+    }
+    if(!valid_utf8(object) || !json_flat_object(object)) {
+      err="JSON array must contain flat UTF-8 JSON objects";return false;
+    }
+    row.push_back(std::move(object));
+    array_after_item_=true;
+    has_row=true;
+    return true;
   }
 
   bool csv_row(std::vector<std::string> &row,bool &has_row,
@@ -447,6 +527,8 @@ private:
   bool eof_,consumed_;
   uint64_t bytes_returned_;
   bool first_row_pending_;
+  bool array_after_item_;
+  bool array_closed_;
   struct stat identity_;
   StreamOptions opts_;
   std::string root_,path_;

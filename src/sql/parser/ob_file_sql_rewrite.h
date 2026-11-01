@@ -1701,11 +1701,32 @@ inline bool source_sql(const std::string &type,const std::string &path,
       (type=="read_json" && (opts.json_newlines ||
         (extension.size()>=6 && extension.substr(extension.size()-6)==".jsonl") ||
         (extension.size()>=7 && extension.substr(extension.size()-7)==".ndjson"))));
-  if(type=="read_csv" || newline_json) {
+  bool stream_json_array=false;
+  if(type=="read_json" && !newline_json) {
+    std::string root;
+    if(!permitted_root(root,err))return false;
+    const std::string requested=path.empty()?"":
+        (path[0]=='/'?path:(root+"/"+path));
+    char resolved[PATH_MAX]={};
+    struct stat st;
+    if(::realpath(requested.c_str(),resolved)!=nullptr &&
+       under_root(root,resolved) && secured_file_path(resolved) &&
+       ::stat(resolved,&st)==0 && S_ISREG(st.st_mode) &&
+       st.st_size>static_cast<off_t>(MAX_FILE_BYTES)) {
+      std::ifstream probe(resolved,std::ios::binary);
+      char ch=0;
+      size_t examined=0;
+      while(probe.get(ch) && examined++<4096) {
+        if(!space(ch)) {stream_json_array=(ch=='[');break;}
+      }
+    }
+  }
+  if(type=="read_csv" || newline_json || stream_json_array) {
     std::string root;
     if(!permitted_root(root,err))return false;
     file_stream::StreamOptions scan_options;
-    scan_options.format=type=="read_csv"?file_stream::CSV:file_stream::JSONL;
+    scan_options.format=type=="read_csv"?file_stream::CSV:
+        stream_json_array?file_stream::JSON_ARRAY:file_stream::JSONL;
     scan_options.header=opts.csv_header;
     file_stream::NativeFileScanCursor cursor;
     if(!cursor.open(root,path,scan_options,std::vector<std::string>(),err))return false;

@@ -396,6 +396,8 @@ END_P SET_VAR DELIMITER
 %type <node> update_basic_stmt delete_basic_stmt
 %type <node> table_element_list table_element column_definition column_definition_ref column_definition_list column_name_list
 %type <node> opt_generated_keyname opt_generated_option_list opt_generated_column_attribute_list generated_column_attribute opt_storage_type
+// The AI COLUMN parse shape is distinct from a synchronous generated column.
+%type <node> ai_column_option_list ai_column_option
 %type <node> data_type special_table_type opt_if_not_exists opt_if_exists opt_charset collation opt_collation cast_data_type
 %type <node> replace_with_opt_hint insert_with_opt_hint column_list opt_on_duplicate_key_clause opt_into opt_replace opt_temporary no_param_column_ref
 %type <node> insert_vals_list insert_vals value_or_values opt_insert_row_alias
@@ -4848,6 +4850,18 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, $10);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 7, $1, $2, attributes, $7, $9, $12, $4);
 }
+| column_definition_ref data_type AI COLUMN '(' expr ')' WITH '(' ai_column_option_list ')' opt_position_column
+{
+  // Preserve the exact AI expression SQL for later schema validation.
+  // AST: [column_ref, type, attrs, expression, storage, position,
+  //       generated_marker, AI options]. A distinct arity ensures the DDL
+  //       resolver can never silently treat AI COLUMN as a normal column.
+  dup_expr_string($6, result, @6.first_column, @6.last_column);
+  ParseNode *ai_options = NULL;
+  merge_nodes(ai_options, result, T_COLUMN_ATTRIBUTES, $10);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 8,
+                           $1, $2, NULL, $6, NULL, $12, NULL, ai_options);
+}
 | column_definition_ref SERIAL opt_column_attribute_list opt_position_column 
 {
   ParseNode *unsigned_bigint_type = NULL;
@@ -4873,6 +4887,31 @@ column_definition_ref data_type opt_column_attribute_list opt_column_reference o
   malloc_non_terminal_node(attributes, result->malloc_pool_, T_LINK_NODE, 2, attributes, unique_attr);
   merge_nodes(attributes, result, T_COLUMN_ATTRIBUTES, attributes);
   malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_DEFINITION, 4, $1, unsigned_bigint_type, attributes, $4);
+}
+;
+
+// Parsed as name/value pairs; the DDL resolver validates sync_mode and
+// max_retries before enabling the durable, post-commit AI worker feature.
+// Keep option spelling in the AST rather than assuming order or defaults.
+ai_column_option_list:
+ai_column_option
+{
+  $$ = $1;
+}
+| ai_column_option_list ',' ai_column_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+ai_column_option:
+column_name COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ASSIGN_ITEM, 2, $1, $3);
+}
+| column_name COMP_EQ INTNUM
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ASSIGN_ITEM, 2, $1, $3);
 }
 ;
 
