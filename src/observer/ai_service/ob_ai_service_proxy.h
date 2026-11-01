@@ -33,11 +33,53 @@ class ObMySQLResult;
 namespace share
 {
 
+// Transient catalog write records. These do not change ObColumnSchemaV2 or
+// pretend that CREATE TABLE / DML is wired. The caller owns all ObString data.
+struct ObAiColumnDefinitionRow
+{
+  uint64_t table_id_;
+  uint64_t column_id_;
+  int64_t definition_version_;
+  int64_t schema_version_;
+  ObString expression_sql_;
+  ObString dependency_column_ids_;
+  ObString model_name_;
+  ObString ai_function_;
+  int64_t return_type_;
+  int64_t vector_dimension_;
+  ObString sync_mode_;
+  int64_t max_retries_;
+  int64_t definition_status_;
+};
+
+struct ObAiColumnTaskRow
+{
+  uint64_t table_id_;
+  uint64_t column_id_;
+  ObString request_id_;
+  int64_t definition_version_;
+  int64_t schema_version_;
+  ObString row_identity_;
+  ObString row_incarnation_;
+  int64_t dependency_revision_;
+  ObString group_id_;
+  int64_t group_size_;
+  int64_t max_retries_;
+};
+
 class ObAiServiceProxy
 {
 public:
   ObAiServiceProxy() = default;
   ~ObAiServiceProxy() = default;
+  // Must be called with the CALLER'S already started transaction.
+  // Never start, end or commit a transaction in these methods. A DDL caller
+  // must use the same transaction as its schema update; a DML caller must
+  // use the same transaction as the base-row modification and invalidation.
+  static int insert_ai_column_definition_in_trans(
+      common::ObMySQLTransaction &trans, const ObAiColumnDefinitionRow &row);
+  static int enqueue_ai_column_task_in_trans(
+      common::ObMySQLTransaction &trans, const ObAiColumnTaskRow &row);
   // ai endpoint
   static int insert_ai_endpoint(common::ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint);
   static int select_ai_endpoint(common::ObArenaAllocator &allocator, common::ObISQLClient &sql_proxy,

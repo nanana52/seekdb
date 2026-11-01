@@ -42,6 +42,80 @@ ObString nonnull_empty_string(const ObString &value)
 }
 }
 
+// These use the two generated native system tables. They deliberately do not
+// acquire or commit transactions: the schema/DML writer owns atomicity.
+int ObAiServiceProxy::insert_ai_column_definition_in_trans(
+    ObMySQLTransaction &trans, const ObAiColumnDefinitionRow &row)
+{
+  int ret = OB_SUCCESS;
+  int64_t affected_rows = 0;
+  ObDMLSqlSplicer sql;
+  ObSqlString buffer;
+  if (!trans.is_started() || row.table_id_ == OB_INVALID_ID ||
+      row.column_id_ == OB_INVALID_ID || row.table_id_ == 0 || row.column_id_ == 0 ||
+      row.definition_version_ <= 0 || row.schema_version_ <= 0 ||
+      row.expression_sql_.empty() || row.model_name_.empty() ||
+      row.ai_function_.empty() || row.sync_mode_.compare("async") != 0 ||
+      row.vector_dimension_ < 0 || row.max_retries_ < 0 ||
+      row.definition_status_ != 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql.add_pk_column("table_id", row.table_id_))) {
+  } else if (OB_FAIL(sql.add_pk_column("column_id", row.column_id_))) {
+  } else if (OB_FAIL(sql.add_pk_column("definition_version", row.definition_version_))) {
+  } else if (OB_FAIL(sql.add_column("schema_version", row.schema_version_))) {
+  } else if (OB_FAIL(sql.add_column("expression_sql", ObHexEscapeSqlStr(row.expression_sql_)))) {
+  } else if (OB_FAIL(sql.add_column("dependency_column_ids", ObHexEscapeSqlStr(nonnull_empty_string(row.dependency_column_ids_))))) {
+  } else if (OB_FAIL(sql.add_column("model_name", ObHexEscapeSqlStr(row.model_name_)))) {
+  } else if (OB_FAIL(sql.add_column("ai_function", ObHexEscapeSqlStr(row.ai_function_)))) {
+  } else if (OB_FAIL(sql.add_column("return_type", row.return_type_))) {
+  } else if (OB_FAIL(sql.add_column("vector_dimension", row.vector_dimension_))) {
+  } else if (OB_FAIL(sql.add_column("sync_mode", ObHexEscapeSqlStr(row.sync_mode_)))) {
+  } else if (OB_FAIL(sql.add_column("max_retries", row.max_retries_))) {
+  } else if (OB_FAIL(sql.add_column("definition_status", row.definition_status_))) {
+  } else if (OB_FAIL(sql.splice_insert_sql("__all_ai_column_definition", buffer))) {
+  } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
+  } else if (1 != affected_rows) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int ObAiServiceProxy::enqueue_ai_column_task_in_trans(
+    ObMySQLTransaction &trans, const ObAiColumnTaskRow &row)
+{
+  int ret = OB_SUCCESS;
+  int64_t affected_rows = 0;
+  ObDMLSqlSplicer sql;
+  ObSqlString buffer;
+  if (!trans.is_started() || row.table_id_ == OB_INVALID_ID ||
+      row.column_id_ == OB_INVALID_ID || row.table_id_ == 0 || row.column_id_ == 0 ||
+      row.definition_version_ <= 0 || row.schema_version_ <= 0 ||
+      row.request_id_.empty() || row.request_id_.length() > 64 ||
+      row.row_identity_.empty() || row.row_incarnation_.empty() ||
+      row.row_incarnation_.length() > 64 || row.group_id_.empty() ||
+      row.group_id_.length() > 64 || row.dependency_revision_ <= 0 ||
+      row.group_size_ <= 0 || row.max_retries_ < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql.add_pk_column("table_id", row.table_id_))) {
+  } else if (OB_FAIL(sql.add_pk_column("column_id", row.column_id_))) {
+  } else if (OB_FAIL(sql.add_pk_column("request_id", ObHexEscapeSqlStr(row.request_id_)))) {
+  } else if (OB_FAIL(sql.add_column("definition_version", row.definition_version_))) {
+  } else if (OB_FAIL(sql.add_column("schema_version", row.schema_version_))) {
+  } else if (OB_FAIL(sql.add_column("row_identity", ObHexEscapeSqlStr(row.row_identity_)))) {
+  } else if (OB_FAIL(sql.add_column("row_incarnation", ObHexEscapeSqlStr(row.row_incarnation_)))) {
+  } else if (OB_FAIL(sql.add_column("dependency_revision", row.dependency_revision_))) {
+  } else if (OB_FAIL(sql.add_column("group_id", ObHexEscapeSqlStr(row.group_id_)))) {
+  } else if (OB_FAIL(sql.add_column("group_size", row.group_size_))) {
+  } else if (OB_FAIL(sql.add_column("max_retries", row.max_retries_))) {
+  // status, attempts, next_due and lease fields use the catalog's defaults.
+  } else if (OB_FAIL(sql.splice_insert_sql("__all_ai_column_task", buffer))) {
+  } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
+  } else if (1 != affected_rows) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
 int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint)
 {
   int ret = OB_SUCCESS;
