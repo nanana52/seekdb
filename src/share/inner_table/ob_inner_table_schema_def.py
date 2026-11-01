@@ -2465,6 +2465,77 @@ all_objauth_mysql_def = dict(
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
 
+# 1135: __all_ai_column_definition (experimental; reserve ID before upstream PR)
+# Persist immutable AI column definitions independently of __all_column column flags
+# and comment text. This table alone does not enable AI COLUMN DDL.
+all_ai_column_definition_def = dict(
+    owner = 'seekdb.ai',
+    table_name = '__all_ai_column_definition',
+    table_id = '1135',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    is_cluster_private = False,
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int'),
+      ('definition_version', 'int')
+    ],
+    normal_columns = [
+      ('schema_version', 'int', 'false', '0'),
+      ('expression_sql', 'longtext', 'false'),
+      ('dependency_column_ids', 'longtext', 'false'),
+      ('model_name', 'varchar:128', 'false'),
+      ('ai_function', 'varchar:32', 'false'),
+      ('return_type', 'int', 'false'),
+      ('vector_dimension', 'int', 'false', '0'),
+      ('sync_mode', 'varchar:16', 'false', 'async'),
+      ('max_retries', 'int', 'false', '2'),
+      ('definition_status', 'int', 'false', '0')
+    ]
+)
+def_table_schema(**all_ai_column_definition_def)
+
+# 1136: __all_ai_column_task (experimental; reserve ID before upstream PR)
+# Outbox tasks must be inserted in the SAME transaction as base-row changes.
+# Worker leases, retries, group fencing and result publication are NOT wired.
+# The SQL request_id is a stable, collision-resistant 128-bit identifier;
+# a row identity alone is not a safe primary key when users change PKs.
+all_ai_column_task_def = dict(
+    owner = 'seekdb.ai',
+    table_name = '__all_ai_column_task',
+    table_id = '1136',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    is_cluster_private = False,
+    rowkey_columns = [
+      ('table_id', 'int'),
+      ('column_id', 'int'),
+      ('request_id', 'varchar:64')
+    ],
+    normal_columns = [
+      ('definition_version', 'int', 'false'),
+      ('schema_version', 'int', 'false'),
+      ('row_identity', 'longtext', 'false'),
+      ('row_incarnation', 'varchar:64', 'false'),
+      ('dependency_revision', 'int', 'false'),
+      ('group_id', 'varchar:64', 'false'),
+      ('group_size', 'int', 'false'),
+      ('task_status', 'int', 'false', '0'),
+      ('attempt_count', 'int', 'false', '0'),
+      ('max_retries', 'int', 'false', '2'),
+      ('next_due_us', 'int', 'false', '0'),
+      ('lease_owner', 'varchar:128', 'true'),
+      ('lease_token', 'varchar:64', 'true'),
+      ('lease_deadline_us', 'int', 'false', '0'),
+      ('staged_result', 'longtext', 'true'),
+      ('result_type', 'int', 'true'),
+      ('error_code', 'int', 'false', '0'),
+      ('error_message', 'varchar:2048', 'true')
+    ]
+)
+def_table_schema(**all_ai_column_task_def)
+
+
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
