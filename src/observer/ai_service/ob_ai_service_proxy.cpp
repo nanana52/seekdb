@@ -18,7 +18,6 @@
 #include "observer/ai_service/ob_ai_service_proxy.h"
 #include "share/ob_share_util.h"
 #include "share/ob_dml_sql_splicer.h"
-#include "share/ai_service/ob_ai_column_task_state.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_max_id_fetcher.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
@@ -35,6 +34,16 @@ using namespace oceanbase::transaction;
 
 namespace
 {
+// SQL status values mirror the persistent TaskState enum.
+enum class AiCatalogSqlTaskStatus : int
+{
+  WAITING = 0,
+  RUNNING = 1,
+  RETRY_WAIT = 2,
+  SUCCESS_STAGED = 3,
+  FAILURE_STAGED = 4,
+};
+
 // ObHexEscapeSqlStr serializes a null pointer as SQL NULL even when length is
 // zero. Local keyless providers need an actual empty string in the system table.
 ObString nonnull_empty_string(const ObString &value)
@@ -141,7 +150,7 @@ int ObAiServiceProxy::try_claim_ai_column_task_in_trans(
   } else if (OB_FAIL(sql.assign_fmt(
       "UPDATE __all_ai_column_task SET task_status = %d, "
       "attempt_count = attempt_count + 1, lease_owner = ",
-      static_cast<int>(ai_column::TaskState::RUNNING)))) {
+      static_cast<int>(AiCatalogSqlTaskStatus::RUNNING)))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_owner_, sql))) {
   } else if (OB_FAIL(sql.append_fmt(", lease_token = "))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_token_, sql))) {
@@ -160,8 +169,8 @@ int ObAiServiceProxy::try_claim_ai_column_task_in_trans(
       "AND (task_status = %d OR "
       "(task_status = %d AND next_due_us <= %ld)) "
       "AND (lease_token IS NULL OR lease_token <> ",
-      static_cast<int>(ai_column::TaskState::WAITING),
-      static_cast<int>(ai_column::TaskState::RETRY_WAIT), lease.now_us_))) {
+      static_cast<int>(AiCatalogSqlTaskStatus::WAITING),
+      static_cast<int>(AiCatalogSqlTaskStatus::RETRY_WAIT), lease.now_us_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_token_, sql))) {
   } else if (OB_FAIL(sql.append_fmt(")"))) {
   } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
@@ -196,7 +205,7 @@ int ObAiServiceProxy::stage_ai_column_success_in_trans(
   } else if (OB_FAIL(sql.assign_fmt(
       "UPDATE __all_ai_column_task SET task_status = %d, "
       "staged_result = ",
-      static_cast<int>(ai_column::TaskState::SUCCESS_STAGED)))) {
+      static_cast<int>(AiCatalogSqlTaskStatus::SUCCESS_STAGED)))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(nonnull_empty_string(staged_result), sql))) {
   } else if (OB_FAIL(sql.append_fmt(
       ", result_type = %ld WHERE table_id = %lu AND column_id = %lu "
@@ -205,7 +214,7 @@ int ObAiServiceProxy::stage_ai_column_success_in_trans(
   } else if (OB_FAIL(sql.append_fmt(
       " AND task_status = %d AND definition_version = %ld "
       "AND dependency_revision = %ld AND row_incarnation = ",
-      static_cast<int>(ai_column::TaskState::RUNNING),
+      static_cast<int>(AiCatalogSqlTaskStatus::RUNNING),
       lease.definition_version_, lease.dependency_revision_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
   } else if (OB_FAIL(sql.append_fmt(" AND lease_owner = "))) {
@@ -250,8 +259,8 @@ int ObAiServiceProxy::stage_ai_column_failure_in_trans(
       "next_due_us = CASE WHEN %d = 1 AND attempt_count < max_retries THEN %ld ELSE 0 END, "
       "error_code = %ld, error_message = ",
       retryable ? 1 : 0,
-      static_cast<int>(ai_column::TaskState::RETRY_WAIT),
-      static_cast<int>(ai_column::TaskState::FAILURE_STAGED),
+      static_cast<int>(AiCatalogSqlTaskStatus::RETRY_WAIT),
+      static_cast<int>(AiCatalogSqlTaskStatus::FAILURE_STAGED),
       retryable ? 1 : 0, next_due_us, error_code))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(nonnull_empty_string(error_message), sql))) {
   } else if (OB_FAIL(sql.append_fmt(
@@ -262,7 +271,7 @@ int ObAiServiceProxy::stage_ai_column_failure_in_trans(
   } else if (OB_FAIL(sql.append_fmt(
       " AND task_status = %d AND definition_version = %ld "
       "AND dependency_revision = %ld AND row_incarnation = ",
-      static_cast<int>(ai_column::TaskState::RUNNING),
+      static_cast<int>(AiCatalogSqlTaskStatus::RUNNING),
       lease.definition_version_, lease.dependency_revision_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
   } else if (OB_FAIL(sql.append_fmt(" AND lease_owner = "))) {
@@ -304,14 +313,14 @@ int ObAiServiceProxy::recover_expired_ai_column_task_in_trans(
       "task_status = CASE WHEN attempt_count < max_retries THEN %d ELSE %d END, "
       "next_due_us = %ld, lease_deadline_us = 0, lease_owner = NULL "
       "WHERE table_id = %lu AND column_id = %lu AND request_id = ",
-      static_cast<int>(ai_column::TaskState::RETRY_WAIT),
-      static_cast<int>(ai_column::TaskState::FAILURE_STAGED),
+      static_cast<int>(AiCatalogSqlTaskStatus::RETRY_WAIT),
+      static_cast<int>(AiCatalogSqlTaskStatus::FAILURE_STAGED),
       next_due_us, lease.table_id_, lease.column_id_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.request_id_, sql))) {
   } else if (OB_FAIL(sql.append_fmt(
       " AND task_status = %d AND definition_version = %ld "
       "AND dependency_revision = %ld AND row_incarnation = ",
-      static_cast<int>(ai_column::TaskState::RUNNING),
+      static_cast<int>(AiCatalogSqlTaskStatus::RUNNING),
       lease.definition_version_, lease.dependency_revision_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
   } else if (OB_FAIL(sql.append_fmt(

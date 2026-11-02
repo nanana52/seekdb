@@ -12,6 +12,13 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 cpp = (ROOT / 'src/observer/ai_service/ob_ai_service_proxy.cpp').read_text()
 hdr = (ROOT / 'src/observer/ai_service/ob_ai_service_proxy.h').read_text()
+from re import search, findall
+canonical = (ROOT / 'src/share/ai_service/ob_ai_column_task_state.h').read_text()
+a = search(r'enum class TaskState\s*:\s*uint8_t\s*\{(.*?)\};', canonical, flags=16)
+b = search(r'enum class AiCatalogSqlTaskStatus\s*:\s*int\s*\{(.*?)\};', cpp, flags=16)
+assert a and b
+values = lambda x: dict((k,int(v)) for k,v in findall(r'([A-Z_]+)\s*=\s*(\d+)', x.group(1)))
+assert all(values(a).get(k) == v for k,v in values(b).items())
 start = 'int ObAiServiceProxy::try_claim_ai_column_task_in_trans('
 end = 'int ObAiServiceProxy::insert_ai_endpoint('
 assert cpp.count(start) == 1 and cpp.count(end) == 1
@@ -89,6 +96,7 @@ struct ObMySQLTransaction {
 };
 #include "share/ai_service/ob_ai_column_task_state.h"
 namespace ai_column = oceanbase::share::ai_column;
+using AiCatalogSqlTaskStatus = oceanbase::share::ai_column::TaskState;
 '''
 cls = r'''
 class ObAiServiceProxy {
