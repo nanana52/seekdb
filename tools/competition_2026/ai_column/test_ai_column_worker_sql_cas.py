@@ -28,6 +28,7 @@ assert hdr.count(struct_start) == 1
 struct = hdr[hdr.index(struct_start):hdr.index('class ObAiServiceProxy')]
 for name in ('try_claim_ai_column_task_in_trans',
              'stage_ai_column_success_in_trans',
+             'renew_ai_column_task_lease_in_trans',
              'recover_expired_ai_column_task_in_trans',
              'stage_ai_column_failure_in_trans'):
     assert ('static int ' + name + '(') in hdr
@@ -102,6 +103,7 @@ cls = r'''
 class ObAiServiceProxy {
 public:
   static int try_claim_ai_column_task_in_trans(ObMySQLTransaction &, const ObAiColumnTaskLease &, bool &);
+  static int renew_ai_column_task_lease_in_trans(ObMySQLTransaction &, const ObAiColumnTaskLease &, bool &);
   static int stage_ai_column_success_in_trans(ObMySQLTransaction &, const ObAiColumnTaskLease &, const ObString &, int64_t, bool &);
   static int recover_expired_ai_column_task_in_trans(ObMySQLTransaction &, const ObAiColumnTaskLease &, int64_t, bool &);
   static int stage_ai_column_failure_in_trans(ObMySQLTransaction &, const ObAiColumnTaskLease &, bool, int64_t, int64_t, const ObString &, bool &);
@@ -119,6 +121,11 @@ int main() {
   int rc=ObAiServiceProxy::try_claim_ai_column_task_in_trans(tx, lease, ok);
   assert(rc==OB_SUCCESS && ok && tx.writes.size()==1);
   std::cout << "CLAIM|" << tx.writes.back() << '\n';
+  lease.now_us_=125; lease.lease_deadline_us_=300;
+  rc=ObAiServiceProxy::renew_ai_column_task_lease_in_trans(tx,lease,ok);
+  assert(rc==OB_SUCCESS && ok);
+  std::cout << "RENEW|" << tx.writes.back() << '\n';
+  lease.now_us_=100; lease.lease_deadline_us_=200;
   rc=ObAiServiceProxy::stage_ai_column_success_in_trans(tx,lease,ObString("answer'"),1,ok);
   assert(rc==OB_SUCCESS && ok);
   std::cout << "STAGE|" << tx.writes.back() << '\n';
@@ -167,7 +174,7 @@ with tempfile.TemporaryDirectory() as temp:
     out = subprocess.run([str(exe)], capture_output=True, text=True, check=True).stdout
 assert 'CPP_CONTRACT_PASS' in out
 sqls = dict(line.split('|',1) for line in out.splitlines() if '|' in line)
-assert set(sqls) == {'CLAIM','STAGE','RECOVER','RECLAIM','FAIL_RETRY','FAIL_FINAL'}
+assert set(sqls) == {'CLAIM','RENEW','STAGE','RECOVER','RECLAIM','FAIL_RETRY','FAIL_FINAL'}
 assert all('req\'' not in sql for sql in sqls.values())
 assert all('g\'42' not in sql for sql in sqls.values())
 
@@ -210,10 +217,12 @@ checks+=2
 # Expired worker must not change already staged result.
 assert run(db,'RECOVER')==0
 checks+=1
-# A waiting task with zero retry budget is never claimable.
+# max_retries counts *additional* attempts: 0 still permits the first call.
 db=connection(retries=0)
-assert run(db,'CLAIM')==0
-checks+=1
+assert run(db,'CLAIM')==1 and row(db)[:2]==(1,1)
+assert run(db,'FAIL_RETRY')==1 and row(db)[0]==4
+assert run(db,'RECLAIM')==0
+checks+=3
 # Retry waiting not due, no claim; once due, can claim.
 db=connection(state=2,due=150)
 assert run(db,'CLAIM')==0
@@ -228,21 +237,52 @@ assert run(db,'STAGE')==0
 assert run(db,'RECLAIM')==1 and row(db)[0]==1 and row(db)[2]==b'token2'
 assert run(db,'STAGE')==0
 checks+=4
-# At retry cap, recovery stages a failure instead of leaving RUNNING forever.
+# Two retries means three total attempts. The third failure is terminal.
 db=connection(state=1,attempts=2,retries=2,deadline=170,token=b'token1')
-assert run(db,'RECOVER')==1 and row(db)[0]==4
-assert run(db,'RECLAIM')==0
+assert run(db,'RECOVER')==1 and row(db)[0]==2
+assert run(db,'RECLAIM')==1 and row(db)[:2]==(1,3)
 checks+=2
+db=connection(state=1,attempts=3,retries=2,deadline=170,token=b'token1')
+assert run(db,'RECOVER')==1 and row(db)[0]==4
+assert db.execute('SELECT next_due_us FROM __all_ai_column_task').fetchone()[0]==0
+assert run(db,'RECLAIM')==0
+checks+=3
 # Failed model execution honors retry budget while retaining token fencing.
 db=connection(state=1,attempts=1,deadline=200,token=b'token1')
 assert run(db,'FAIL_RETRY')==1 and row(db)[0]==2
 assert run(db,'FAIL_RETRY')==0
 checks+=2
 db=connection(state=1,attempts=2,retries=2,deadline=200,token=b'token1')
-assert run(db,'FAIL_RETRY')==1 and row(db)[0]==4
+assert run(db,'FAIL_RETRY')==1 and row(db)[0]==2
 checks+=1
+db=connection(state=1,attempts=3,retries=2,deadline=200,token=b'token1')
+assert run(db,'FAIL_RETRY')==1 and row(db)[0]==4
+assert db.execute('SELECT next_due_us FROM __all_ai_column_task').fetchone()[0]==0
+checks+=2
 db=connection(state=1,attempts=1,deadline=200,token=b'token1')
 assert run(db,'FAIL_FINAL')==1 and row(db)[0]==4
+checks+=1
+# Only the current worker can extend an active lease; no shrinking or
+# same-deadline renewal, no extending after expiry, and no stale identity.
+db=connection(state=1,attempts=1,deadline=200,token=b'token1')
+assert run(db,'RENEW')==1 and row(db)[3]==300
+assert run(db,'RENEW')==0 and row(db)[3]==300
+checks+=2
+db=connection(state=1,attempts=1,deadline=125,token=b'token1')
+assert run(db,'RENEW')==0
+checks+=1
+db=connection(state=1,attempts=1,deadline=350,token=b'token1')
+assert run(db,'RENEW')==0
+checks+=1
+db=connection(state=1,attempts=1,deadline=200,token=b'old-token')
+assert run(db,'RENEW')==0
+checks+=1
+db=connection(state=1,attempts=1,deadline=200,token=b'token1')
+db.execute('UPDATE __all_ai_column_task SET row_incarnation=?', (b"different",))
+assert run(db,'RENEW')==0
+checks+=1
+db=connection(state=3,attempts=1,deadline=200,token=b'token1')
+assert run(db,'RENEW')==0
 checks+=1
 # Revisions and row incarnations must match exactly.
 db=connection()

@@ -102,6 +102,11 @@ public:
   static int try_claim_ai_column_task_in_trans(
       common::ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
       bool &claimed);
+  // Extend a live lease only if its owner, token and row/definition fence
+  // still match; the new expiration must be strictly later than the old.
+  static int renew_ai_column_task_lease_in_trans(
+      common::ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+      bool &renewed);
   static int stage_ai_column_success_in_trans(
       common::ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
       const ObString &staged_result, int64_t result_type, bool &staged);

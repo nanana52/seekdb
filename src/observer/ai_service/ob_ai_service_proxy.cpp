@@ -165,7 +165,7 @@ int ObAiServiceProxy::try_claim_ai_column_task_in_trans(
       lease.definition_version_, lease.dependency_revision_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
   } else if (OB_FAIL(sql.append_fmt(
-      " AND attempt_count < max_retries "
+      " AND attempt_count <= max_retries "
       "AND (task_status = %d OR "
       "(task_status = %d AND next_due_us <= %ld)) "
       "AND (lease_token IS NULL OR lease_token <> ",
@@ -178,6 +178,55 @@ int ObAiServiceProxy::try_claim_ai_column_task_in_trans(
     ret = OB_ERR_UNEXPECTED;
   } else {
     claimed = (affected_rows == 1);
+  }
+  return ret;
+}
+
+// Heartbeat must never revive an expired or superseded lease. The worker
+// supplies one monotone expiry extension and the same fencing identity it
+// used for claim. A zero affected-row count means this worker is no longer
+// authorized to publish; the caller must discard its computed result.
+int ObAiServiceProxy::renew_ai_column_task_lease_in_trans(
+    ObMySQLTransaction &trans, const ObAiColumnTaskLease &lease,
+    bool &renewed)
+{
+  int ret = OB_SUCCESS;
+  renewed = false;
+  int64_t affected_rows = 0;
+  ObSqlString sql;
+  if (!trans.is_started() || lease.table_id_ == 0 ||
+      lease.table_id_ == OB_INVALID_ID || lease.column_id_ == 0 ||
+      lease.column_id_ == OB_INVALID_ID || lease.request_id_.empty() ||
+      lease.request_id_.length() > 64 || lease.definition_version_ <= 0 ||
+      lease.dependency_revision_ <= 0 || lease.row_incarnation_.empty() ||
+      lease.row_incarnation_.length() > 64 || lease.lease_owner_.empty() ||
+      lease.lease_owner_.length() > 128 || lease.lease_token_.empty() ||
+      lease.lease_token_.length() > 64 || lease.now_us_ <= 0 ||
+      lease.lease_deadline_us_ <= lease.now_us_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sql.assign_fmt(
+      "UPDATE __all_ai_column_task SET lease_deadline_us = %ld "
+      "WHERE table_id = %lu AND column_id = %lu AND request_id = ",
+      lease.lease_deadline_us_, lease.table_id_, lease.column_id_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.request_id_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND task_status = %d AND definition_version = %ld "
+      "AND dependency_revision = %ld AND row_incarnation = ",
+      static_cast<int>(AiCatalogSqlTaskStatus::RUNNING),
+      lease.definition_version_, lease.dependency_revision_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.row_incarnation_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND lease_owner = "))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_owner_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND lease_token = "))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(lease.lease_token_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(
+      " AND lease_deadline_us > %ld AND lease_deadline_us < %ld",
+      lease.now_us_, lease.lease_deadline_us_))) {
+  } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
+  } else if (affected_rows > 1 || affected_rows < 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    renewed = (affected_rows == 1);
   }
   return ret;
 }
@@ -255,8 +304,8 @@ int ObAiServiceProxy::stage_ai_column_failure_in_trans(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(sql.assign_fmt(
       "UPDATE __all_ai_column_task SET task_status = "
-      "CASE WHEN %d = 1 AND attempt_count < max_retries THEN %d ELSE %d END, "
-      "next_due_us = CASE WHEN %d = 1 AND attempt_count < max_retries THEN %ld ELSE 0 END, "
+      "CASE WHEN %d = 1 AND attempt_count <= max_retries THEN %d ELSE %d END, "
+      "next_due_us = CASE WHEN %d = 1 AND attempt_count <= max_retries THEN %ld ELSE 0 END, "
       "error_code = %ld, error_message = ",
       retryable ? 1 : 0,
       static_cast<int>(AiCatalogSqlTaskStatus::RETRY_WAIT),
@@ -310,8 +359,9 @@ int ObAiServiceProxy::recover_expired_ai_column_task_in_trans(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(sql.assign_fmt(
       "UPDATE __all_ai_column_task SET "
-      "task_status = CASE WHEN attempt_count < max_retries THEN %d ELSE %d END, "
-      "next_due_us = %ld, lease_deadline_us = 0, lease_owner = NULL "
+      "task_status = CASE WHEN attempt_count <= max_retries THEN %d ELSE %d END, "
+      "next_due_us = CASE WHEN attempt_count <= max_retries THEN %ld ELSE 0 END, "
+      "lease_deadline_us = 0, lease_owner = NULL "
       "WHERE table_id = %lu AND column_id = %lu AND request_id = ",
       static_cast<int>(AiCatalogSqlTaskStatus::RETRY_WAIT),
       static_cast<int>(AiCatalogSqlTaskStatus::FAILURE_STAGED),
