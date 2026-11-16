@@ -12039,6 +12039,9 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
     tr_info.match_expr_ = match_against;
     tr_info.pushdown_match_filter_ = match_pred;
+    // A repeated MATCH may survive as a residual scan filter even when the
+    // statement's canonical expression list contains only one entry.
+    if (all_match_filters.count() > 1) { tr_info.need_calc_relevance_ = true; }
     // The mapping table is absent when the data-table rowkey is used as the document ID.
     table_scan->set_doc_id_index_table_id(tr_info.doc_id_idx_tid_);
     if (table_scan->is_vec_adaptive_scan() || table_scan->is_vec_idx_scan_post_filter()) {
@@ -12167,6 +12170,21 @@ int ObLogPlan::prepare_text_retrieval_merge(const ObIArray<ObRawExpr *> &merge_m
   return ret;
 }
 
+namespace {
+bool observes_match_score(const ObRawExpr *expr, const ObRawExpr *match, int depth = 0) {
+  if (expr == nullptr || depth > 128) { return true; }
+  if (expr == match || (expr->get_expr_type() == T_FUN_MATCH_AGAINST && expr->same_as(*match))) { return true; }
+  for (int64_t i = 0; i < expr->get_param_count(); ++i) {
+    if (observes_match_score(expr->get_param_expr(i), match, depth + 1)) { return true; }
+  }
+  return false;
+}
+bool safe_positive_match_predicate(const ObRawExpr *expr, const ObRawExpr *match) {
+  return expr == match || (expr != nullptr && expr->get_expr_type() == T_OP_BOOL &&
+      expr->get_param_count() == 1 && expr->get_param_expr(0) == match);
+}
+}
+
 int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
                                            const uint64_t index_table_id,
                                            ObMatchFunRawExpr *match_against,
@@ -12263,6 +12281,32 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
       LOG_WARN("failed to append array no dup", K(ret));
     }
     */
+    // Natural-language MATCH used only as an unranked positive predicate
+    // needs postings membership, not BM25, document totals or token lengths.
+    // Keep exact scores for projections, thresholds, BOOLEAN mode and LIMIT
+    // (the existing implicit score ordering can affect which rows survive).
+    if (match_against->get_mode_flag() == NATURAL_LANGUAGE_MODE &&
+        get_stmt()->is_select_stmt() && get_stmt()->get_match_exprs().count() == 1 &&
+        !get_stmt()->has_limit() && !get_stmt()->has_order_by()) {
+      ObSEArray<ObRawExpr *, 16> observed;
+      ObStmtExprGetter visitor;
+      visitor.set_relation_scope();
+      visitor.remove_scope(SCOPE_WHERE);
+      bool score_used = false;
+      if (OB_FAIL(get_stmt()->get_relation_exprs(observed, visitor))) {
+      } else {
+        for (int64_t i = 0; !score_used && i < observed.count(); ++i) {
+          score_used = observes_match_score(observed.at(i), match_against);
+        }
+        const auto &conditions = get_stmt()->get_condition_exprs();
+        for (int64_t i = 0; !score_used && i < conditions.count(); ++i) {
+          const ObRawExpr *predicate = conditions.at(i);
+          if (observes_match_score(predicate, match_against) &&
+              !safe_positive_match_predicate(predicate, match_against)) { score_used = true; }
+        }
+        need_calc_relevance = score_used;
+      }
+    }
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;
