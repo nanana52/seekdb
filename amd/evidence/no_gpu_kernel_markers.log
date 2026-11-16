@@ -1,0 +1,3 @@
+HIPVS_NATIVE_STAGE resources count=5000 dim=128
+HIPVS_NATIVE_STAGE parameters
+HIPVS_NATIVE_STAGE graph_build

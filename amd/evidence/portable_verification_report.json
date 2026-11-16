@@ -1,0 +1,26 @@
+{
+  "rows": 5000,
+  "dimensions": 128,
+  "M": 32,
+  "ef_construction": 200,
+  "session_ef_search": 512,
+  "trials": [
+    {
+      "vsag": {
+        "ddl_sec": 1.5436382940970361,
+        "recall_at_10": 1.0,
+        "table": "v_1794845617311525431_vsag_0",
+        "vector_index_plan": true
+      },
+      "cuvs": {
+        "ddl_sec": 3.3385739009827375,
+        "recall_at_10": 1.0,
+        "table": "v_1794845617311525431_cuvs_0",
+        "vector_index_plan": true
+      }
+    }
+  ],
+  "median_ddl_speedup": 0.4623645723830325,
+  "status": "passed",
+  "scope": "real SQL DDL timing; verify HIPVS_NATIVE_HNSW_BUILD_COMMITTED in server log to establish GPU use"
+}

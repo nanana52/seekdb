@@ -1,0 +1,13 @@
+{
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "rocm": "7.2.4",
+  "gpu": "\n\n============================ ROCm System Management Interface ============================\n====================================== Product Info ======================================\nGPU[0]\t\t: Card Series: \t\tAMD Radeon Graphics\nGPU[0]\t\t: Card Model: \t\t0x744b\nGPU[0]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[0]\t\t: Card SKU: \t\tD7070910\nGPU[0]\t\t: Subsystem ID: \t0x0e0c\nGPU[0]\t\t: Device Rev: \t\t0x00\nGPU[0]\t\t: Node ID: \t\t3\nGPU[0]\t\t: GUID: \t\t49884\nGPU[0]\t\t: GFX Version: \t\tgfx1100\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+  "source_hashes": {
+    "src/observer/vector_index/ob_plugin_vector_index_adaptor.cpp": "3cf99980c57bd5e8a80e0474d266e7a3e3ce8012ff031bde10bb20a1446a190a",
+    "src/oblib/lib/vector/ob_vsag_adaptor.cpp": "94cfa072a20c2c716f296ef2f9eb45b35098e160b909b03f0d4170ddfb1f8432",
+    "tools/hipvs_bridge/seekdb_cuvs_hnsw_bridge.cpp": "aff91670e191956f02ccdbd5026d9764cf8b31d7b2634e07995c4e7d3416bb71"
+  },
+  "binary_sha256": "21e454aa8007ea64f9b14d469f08e3c142f75c2835c57917f1aa1505ccc4f1c5",
+  "bridge_sha256": "fcb0676c1cbd28c84a84e3908db70e3f49bcbc5a742afcb11fe93af1804927dd"
+}

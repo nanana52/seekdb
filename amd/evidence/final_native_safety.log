@@ -1,0 +1,5 @@
+NATIVE_SQL_INSTANCE_READY 20581
+REAL_SQL 0 5.7.25-OceanBase seekdb-v1.4.0.0
+ 
+NATIVE_GPU_INDEX_RESTART_PASS {"status": "passed", "after_restart_mean_recall_at_10": 1.0, "rows": 20000, "vector_index_explain": true, "post_restart_sql_filter": true, "plan": "('==========================================================',)\n('|ID|OPERATOR         |NAME         |EST.ROWS|EST.TIME(us)|',)\n('----------------------------------------------------------',)\n('|0 |VECTOR INDEX SCAN|gpu_docs(idx)|2       |10          |',)\n('==========================================================',)\n('Outputs & filters:',)\n('-------------------------------------',)\n('  0 - output([gpu_docs.id]), filter(nil), rowset=16',)\n('      access([gpu_docs.id]), partitions(p0)',)\n('      is_index_back=true, is_global_index=false, ',)\n('      range_key([gpu_docs.__vid_1794844111516853], [gpu_docs.__type_17_1794844111760957]), range(MIN,MIN ; MAX,MAX)always true',)"}
+FINAL_NO_GPU_CPU_FALLBACK_REAL_SQL_PASS

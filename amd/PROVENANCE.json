@@ -1,0 +1,8 @@
+{
+  "official_baseline": "5bce9e06d1281347ad61344e4b01fab9158c58a2",
+  "upstream": "https://github.com/oceanbase/seekdb/pull/1314",
+  "upstream_commit": "aadf910a6dae3b51ebc9f7cc61c3e3fe6bdd1a53",
+  "native_build_source": "tools/hipvs_bridge/seekdb_cuvs_hnsw_bridge.cpp",
+  "evaluation_status": "not_yet_submitted",
+  "licenses": "Repository Apache-2.0; upstream notices retained"
+}

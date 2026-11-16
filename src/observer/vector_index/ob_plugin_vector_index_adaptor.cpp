@@ -1361,6 +1361,20 @@ int ObPluginVectorIndexAdaptor::init_sparse_vector_type()
   return ret;
 }
 
+// [hipVS/cuVS] Mark a just-populated index handle for the GPU path when the
+// vector index was declared WITH (lib=cuvs) on a dense L2 HNSW index. Idempotent.
+static inline void ob_mark_cuvs_if_needed(void *algo_data, void *handle)
+{
+  ObVectorIndexParam *param = static_cast<ObVectorIndexParam *>(algo_data);
+  if (handle != nullptr && param != nullptr
+      && param->lib_ == ObVectorIndexAlgorithmLib::VIAL_CUVS
+      && param->dist_algorithm_ == ObVectorIndexDistAlgorithm::VIDA_L2
+      && (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW
+          || param->type_ == ObVectorIndexAlgorithmType::VIAT_HGRAPH)) {
+    oceanbase::common::obvsag::mark_cuvs_index(handle);
+  }
+}
+
 int ObPluginVectorIndexAdaptor::insert_rows(blocksstable::ObDatumRow *rows,
                                             const int64_t vid_idx,
                                             const int64_t type_idx,
@@ -1523,6 +1537,7 @@ int ObPluginVectorIndexAdaptor::insert_rows(blocksstable::ObDatumRow *rows,
                                               ))) {
         }
       } else {
+        ob_mark_cuvs_if_needed(algo_data_, incr_data_->index_);
         if (OB_FAIL(obvectorutil::add_index(incr_data_->index_,
                                               vectors,
                                               incr_vids,
@@ -1675,6 +1690,18 @@ int ObPluginVectorIndexAdaptor::parse_sparse_vector(char *data, int num, uint32_
    In the scenario where a large amount of data is written, there will be a lot of unnecessary performance consumption,
    so the caller needs to ensure this.
 **************************************************************************/
+static bool ob_native_hipvs_snapshot(const ObVectorIndexParam *param)
+{
+#ifdef OB_BUILD_CUVS
+  return param != nullptr && param->lib_ == ObVectorIndexAlgorithmLib::VIAL_CUVS &&
+      param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW &&
+      param->dist_algorithm_ == ObVectorIndexDistAlgorithm::VIDA_L2 &&
+      param->extra_info_actual_size_ == 0 && param->m_ >= 32;
+#else
+  return false;
+#endif
+}
+
 int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, ObVecExtraInfoObj *extra_objs, int64_t extra_column_count, int num, uint32_t *sparse_byte_lens /* nullptr */)
 {
   INIT_SUCC(ret);
@@ -1690,7 +1717,7 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
   } else if (OB_FALSE_IT(dim = param->dim_)) {
   } else if (OB_FAIL(get_extra_info_actual_size(extra_info_actual_size))) {
   } else {
-    if (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW ||
+    if ((param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW && !ob_native_hipvs_snapshot(param)) ||
         param->type_ == ObVectorIndexAlgorithmType::VIAT_HGRAPH ||
         param->type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) {
       if (OB_FAIL(try_init_mem_data(VIRT_SNAP))) {
@@ -1714,6 +1741,7 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
           lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexVsagADP"));
           lib::ObLightBacktraceGuard light_backtrace_guard(false);
           if (!is_sparse_vector_index_type()) {
+            ob_mark_cuvs_if_needed(algo_data_, snap_data_->index_);
             if (OB_FAIL(obvectorutil::add_index(snap_data_->index_, vectors, vids, dim, extra_info_buf, num))) {
             }
           } else {
@@ -1722,7 +1750,7 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
           }
         }
       }
-    } else if (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW_SQ || param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW_BQ) {
+    } else if (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW_SQ || param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW_BQ || ob_native_hipvs_snapshot(param)) {
       if (OB_FAIL(init_hnswsq_mem_data())) {
       } else if (num == 0 || OB_ISNULL(vectors)) {
         // do nothing
@@ -1767,6 +1795,7 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
               // second: construct hnsw+sq index
               ObVecIdxVidArray *vids_array = snap_data_->vid_array_;
               if (OB_SUCC(ret) && OB_NOT_NULL(vids_array)
+                  && !ob_native_hipvs_snapshot(param)
                   && vids_array->count() > VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD
                   && OB_ISNULL(snap_data_->index_)) {
                 if (OB_FAIL(build_hnswsq_index(param))) {
@@ -2011,7 +2040,7 @@ int ObPluginVectorIndexAdaptor::check_snap_hnswsq_index()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(param = static_cast<ObVectorIndexParam*>(algo_data_))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (param->type_ == VIAT_HNSW || param->type_ == VIAT_HGRAPH || snap_data_->has_build_sq_ || param->type_ == VIAT_IPIVF) {
+  } else if ((param->type_ == VIAT_HNSW && !ob_native_hipvs_snapshot(param)) || param->type_ == VIAT_HGRAPH || snap_data_->has_build_sq_ || param->type_ == VIAT_IPIVF) {
     // do nothing
   } else if (OB_ISNULL(snap_data_->index_)) {
     TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
@@ -2037,12 +2066,15 @@ int ObPluginVectorIndexAdaptor::check_snap_hnswsq_index()
                                              param->refine_type_,
                                              param->bq_bits_query_,
                                              param->bq_use_fht_))) {
-      } else if (OB_FAIL(obvectorutil::add_index(snap_data_->index_,
-                                                 vec_array->get_data(),
-                                                 vid_array->get_data(),
-                                                 param->dim_,
-                                                 extra_info_buf->ptr(),
-                                                 vid_array->count()))) {
+      } else if (OB_FAIL(([&]() -> int {
+        if (ob_native_hipvs_snapshot(param)) {
+          oceanbase::common::obvsag::mark_cuvs_index(snap_data_->index_);
+          return obvectorutil::build_index(snap_data_->index_, vec_array->get_data(),
+              vid_array->get_data(), param->dim_, vid_array->count(), nullptr);
+        }
+        return obvectorutil::add_index(snap_data_->index_, vec_array->get_data(),
+            vid_array->get_data(), param->dim_, extra_info_buf->ptr(), vid_array->count());
+      })())) {
       } else {
         LOG_INFO("HNSW build index success", K(ret), K(param->dim_), K(vid_array->count()));
       }

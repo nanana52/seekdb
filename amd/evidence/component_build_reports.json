@@ -1,0 +1,167 @@
+{
+  "amd_hnsw_build_kit": {
+    "status": "passed",
+    "scope": "GPU-build-to-native-HNSW component validation",
+    "seekdb_kernel_integration": "NOT_ESTABLISHED_BY_THIS_COMPONENT_TEST",
+    "timing_includes": "graph construction, HNSW conversion, synchronization, serialization",
+    "cpu_threads": 8,
+    "trials": [
+      {
+        "trial": 0,
+        "cpu_build_and_save_sec": 0.32515386678278446,
+        "gpu_graph_sec": 1.1430334011092782,
+        "gpu_build_convert_save_sec": 1.3469901871867478,
+        "cpu_recall_at_10": 0.9700000000000002,
+        "gpu_hnsw_recall_at_10": 0.9940000000000001,
+        "rows": 10000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      },
+      {
+        "trial": 1,
+        "cpu_build_and_save_sec": 0.31476198695600033,
+        "gpu_graph_sec": 0.7546476610004902,
+        "gpu_build_convert_save_sec": 0.9620239972136915,
+        "cpu_recall_at_10": 0.9690000000000001,
+        "gpu_hnsw_recall_at_10": 0.998,
+        "rows": 10000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      },
+      {
+        "trial": 2,
+        "cpu_build_and_save_sec": 0.29888823395594954,
+        "gpu_graph_sec": 0.7300703530199826,
+        "gpu_build_convert_save_sec": 0.9396038898266852,
+        "cpu_recall_at_10": 0.9690000000000001,
+        "gpu_hnsw_recall_at_10": 0.995,
+        "rows": 10000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      }
+    ],
+    "median_speedup": 0.32718725090813217,
+    "base_sha256": "62cc879bae28f85835b5bb37838ba2412b2e71f2830601dcedbd4b60ec454942"
+  },
+  "amd_hnsw_build_100k": {
+    "status": "failed",
+    "type": "AssertionError",
+    "error": "('GPU HNSW recall below correctness gate', 0.7120000000000002)",
+    "traceback": "Traceback (most recent call last):\n  File \"/workspace/amd_hnsw_build_100k/benchmark_hnsw_build.py\", line 180, in <module>\n    main()\n  File \"/workspace/amd_hnsw_build_100k/benchmark_hnsw_build.py\", line 155, in main\n    assert gpu_recall>=0.90,(\"GPU HNSW recall below correctness gate\",gpu_recall)\n           ^^^^^^^^^^^^^^^^\nAssertionError: ('GPU HNSW recall below correctness gate', 0.7120000000000002)\n"
+  },
+  "amd_hnsw_build_100k_tuned": {
+    "status": "passed",
+    "scope": "GPU-build-to-native-HNSW component validation",
+    "seekdb_kernel_integration": "NOT_ESTABLISHED_BY_THIS_COMPONENT_TEST",
+    "timing_includes": "graph construction, HNSW conversion, synchronization, serialization",
+    "cpu_threads": 8,
+    "trials": [
+      {
+        "trial": 0,
+        "cpu_build_and_save_sec": 5.305064156185836,
+        "gpu_graph_sec": 1.8418686832301319,
+        "gpu_build_convert_save_sec": 4.131963497027755,
+        "cpu_recall_at_10": 0.92,
+        "gpu_hnsw_recall_at_10": 0.9620000000000001,
+        "rows": 100000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      },
+      {
+        "trial": 1,
+        "cpu_build_and_save_sec": 5.510159400757402,
+        "gpu_graph_sec": 1.4049965729936957,
+        "gpu_build_convert_save_sec": 2.45439243176952,
+        "cpu_recall_at_10": 0.9200000000000002,
+        "gpu_hnsw_recall_at_10": 0.9510000000000001,
+        "rows": 100000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      },
+      {
+        "trial": 2,
+        "cpu_build_and_save_sec": 5.251947714947164,
+        "gpu_graph_sec": 1.3730777991004288,
+        "gpu_build_convert_save_sec": 2.518453077878803,
+        "cpu_recall_at_10": 0.92,
+        "gpu_hnsw_recall_at_10": 0.9590000000000001,
+        "rows": 100000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      }
+    ],
+    "median_speedup": 2.106477266852273,
+    "base_sha256": "e36a9dc86a2889f3834c67bad3a532d6844359f1586d07e6f88d5121b82ffe99"
+  },
+  "amd_hnsw_build_100k_matched": {
+    "status": "failed",
+    "type": "AssertionError",
+    "error": "('GPU HNSW recall below correctness gate', 0.8430000000000001)",
+    "traceback": "Traceback (most recent call last):\n  File \"/workspace/amd_hnsw_build_100k_matched/benchmark_hnsw_build.py\", line 188, in <module>\n    main()\n  File \"/workspace/amd_hnsw_build_100k_matched/benchmark_hnsw_build.py\", line 163, in main\n    assert gpu_recall>=0.90,(\"GPU HNSW recall below correctness gate\",gpu_recall)\n           ^^^^^^^^^^^^^^^^\nAssertionError: ('GPU HNSW recall below correctness gate', 0.8430000000000001)\n"
+  },
+  "amd_hnsw_build_100k_m32_fair": {
+    "status": "passed",
+    "scope": "GPU-build-to-native-HNSW component validation",
+    "seekdb_kernel_integration": "NOT_ESTABLISHED_BY_THIS_COMPONENT_TEST",
+    "timing_includes": "graph construction, HNSW conversion, synchronization, serialization",
+    "cpu_threads": 8,
+    "cpu_hnsw_M": 32,
+    "gpu_hnsw_M": 32,
+    "search_ef": 512,
+    "trials": [
+      {
+        "trial": 0,
+        "cpu_build_and_save_sec": 9.339078358840197,
+        "gpu_graph_sec": 1.7351325834169984,
+        "gpu_build_convert_save_sec": 2.8172099320217967,
+        "cpu_recall_at_10": 0.99,
+        "gpu_hnsw_recall_at_10": 0.9460000000000001,
+        "rows": 100000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      },
+      {
+        "trial": 1,
+        "cpu_build_and_save_sec": 9.464003290981054,
+        "gpu_graph_sec": 1.2485993122681975,
+        "gpu_build_convert_save_sec": 2.7894799918867648,
+        "cpu_recall_at_10": 0.991,
+        "gpu_hnsw_recall_at_10": 0.9530000000000001,
+        "rows": 100000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      },
+      {
+        "trial": 2,
+        "cpu_build_and_save_sec": 9.55152089195326,
+        "gpu_graph_sec": 1.2653892459347844,
+        "gpu_build_convert_save_sec": 2.264508171007037,
+        "cpu_recall_at_10": 0.991,
+        "gpu_hnsw_recall_at_10": 0.9570000000000001,
+        "rows": 100000,
+        "dimensions": 128,
+        "queries": 100,
+        "k": 10,
+        "hnswlib_readback": true
+      }
+    ],
+    "median_speedup": 3.392748224940569,
+    "base_sha256": "e36a9dc86a2889f3834c67bad3a532d6844359f1586d07e6f88d5121b82ffe99"
+  }
+}

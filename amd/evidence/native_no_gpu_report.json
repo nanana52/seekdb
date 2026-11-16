@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "gpu_visibility": "disabled for this process",
+  "rows": 5000,
+  "declared_lib": "cuvs",
+  "build_fallback": "native CPU",
+  "ann_self_query": true,
+  "hip_device_count_check": {
+    "hipGetDeviceCount_return": 100,
+    "visible_devices": 0
+  }
+}

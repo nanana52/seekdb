@@ -1,0 +1,3 @@
+runtime/
+*.pid
+amd_sql_report.json

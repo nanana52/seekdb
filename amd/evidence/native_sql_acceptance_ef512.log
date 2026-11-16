@@ -1,0 +1,9 @@
+NATIVE_SQL_RECALL {"table": "cpu_docs", "mean_recall_at_10": 1.0, "queries": 20}
+NATIVE_SQL_RECALL {"table": "gpu_docs", "mean_recall_at_10": 1.0, "queries": 20}
+NATIVE_REAL_SQL_BUILD_TIME 0 vsag 7.061457483097911
+NATIVE_REAL_SQL_BUILD_TIME 0 cuvs 3.2851600111462176
+NATIVE_REAL_SQL_BUILD_TIME 1 vsag 7.030709601007402
+NATIVE_REAL_SQL_BUILD_TIME 1 cuvs 2.650617220904678
+NATIVE_REAL_SQL_BUILD_TIME 2 vsag 7.0304012591950595
+NATIVE_REAL_SQL_BUILD_TIME 2 cuvs 3.01554447831586
+NATIVE_SQL_ACCEPTANCE_REPORT {"queries": [{"table": "cpu_docs", "mean_recall_at_10": 1.0, "queries": 20}, {"table": "gpu_docs", "mean_recall_at_10": 1.0, "queries": 20}], "build_trials": [{"vsag": 7.061457483097911, "cuvs": 3.2851600111462176}, {"vsag": 7.030709601007402, "cuvs": 2.650617220904678}, {"vsag": 7.0304012591950595, "cuvs": 3.01554447831586}], "ddl_median_speedup": 2.331489272190724, "id_mapping": "PASS", "update_rollback": "PASS", "post_build_insert_delete_ann": "PASS", "status": "passed"}
