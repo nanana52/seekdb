@@ -42,6 +42,25 @@ int ObBEngFTParser::get_next_token(
   word_freq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
+  } else if (ascii_fast_) {
+    const ObCharsetInfo *cs=analysis_ctx_.cs_;
+    const auto delimiter=[cs](char c) {
+      return ob_isspace(cs,c)||ob_iscntrl(cs,c)||ob_ispunct(cs,c);
+    };
+    while(ascii_pos_<doc_.len_ && delimiter(doc_.ptr_[ascii_pos_]))++ascii_pos_;
+    int64_t first=ascii_pos_;
+    while(ascii_pos_<doc_.len_ && !delimiter(doc_.ptr_[ascii_pos_]))++ascii_pos_;
+    int64_t last=ascii_pos_;
+    while(first<last && !ob_isalnum(cs,doc_.ptr_[first]))++first;
+    while(last>first && !ob_isalnum(cs,doc_.ptr_[last-1]))--last;
+    if(first==last) {
+      ret=OB_ITER_END;
+    } else {
+      // The normalized document is owned by the caller's allocator. Token
+      // slices remain valid after this iterator is freed, as in the old path.
+      word=doc_.ptr_+first;
+      word_len=last-first;char_len=word_len;word_freq=1;
+    }
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(token_stream_->get_next(token, token_freq))) {
@@ -76,7 +95,27 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     analysis_ctx_.cs_ = param->cs_;
     analysis_ctx_.filter_stopword_ = false;
     analysis_ctx_.need_grouping_ = false;
-    if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
+    ascii_pos_=0;
+    ascii_fast_=param->cs_->name!=nullptr &&
+        (0==strcmp(param->cs_->name,"utf8mb4_bin") ||
+         0==strcmp(param->cs_->name,"utf8mb4_general_ci") ||
+         0==strcmp(param->cs_->name,"utf8mb4_unicode_ci"));
+    for(int64_t i=0;ascii_fast_&&i<doc_.len_;++i) {
+      ascii_fast_=static_cast<unsigned char>(doc_.ptr_[i])<128;
+    }
+    if(ascii_fast_) {
+      char *normalized=static_cast<char *>(allocator_.alloc(doc_.len_));
+      if(OB_ISNULL(normalized)) {
+        ret=OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        for(int64_t i=0;i<doc_.len_;++i) {
+          const char value=doc_.ptr_[i];
+          normalized[i]=value>='A'&&value<='Z'?value-'A'+'a':value;
+        }
+        doc_.set_string(normalized,doc_.len_);
+        is_inited_=true;
+      }
+    } else if (OB_FAIL(english_analyzer_.init(analysis_ctx_, *param->allocator_))) {
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
     } else if (OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -111,6 +150,8 @@ void ObBEngFTParser::reset()
   doc_.reset();
   token_stream_ = nullptr;
   is_inited_ = false;
+  ascii_fast_=false;
+  ascii_pos_=0;
 }
 
 ObBasicEnglishFTParserDesc::ObBasicEnglishFTParserDesc() {}

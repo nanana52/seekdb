@@ -1,0 +1,53 @@
+[
+  {
+    "source": "large.csv",
+    "bytes": 14778955,
+    "count_sum_null_boolean": "PASS",
+    "filter_sort_limit": "PASS"
+  },
+  {
+    "source": "large.jsonl",
+    "bytes": 18572443,
+    "count_sum_null_boolean": "PASS",
+    "filter_sort_limit": "PASS"
+  },
+  {
+    "source": "large.parquet",
+    "bytes": 14027816,
+    "count_sum_null_boolean": "PASS",
+    "filter_sort_limit": "PASS"
+  },
+  {
+    "cross_format_inner_left_join": "PASS"
+  }
+]
+EXPECTED_REJECTION /opt/oceanbase_completion_20261116/file_outside.csv (1210, 'Invalid argument')
+EXPECTED_REJECTION /opt/oceanbase_completion_20261116/seekdb_runtime_abi_fixed/data_for_mysqltest_file_sql/outside_link.csv (1210, 'Invalid argument')
+EXPECTED_REJECTION /opt/oceanbase_completion_20261116/seekdb_runtime_abi_fixed/data_for_mysqltest_file_sql/../../file_outside.csv (1210, 'Invalid argument')
+[
+  {
+    "source": "large.csv",
+    "bytes": 14778955,
+    "count_sum_null_boolean": "PASS",
+    "filter_sort_limit": "PASS"
+  },
+  {
+    "source": "large.jsonl",
+    "bytes": 18572443,
+    "count_sum_null_boolean": "PASS",
+    "filter_sort_limit": "PASS"
+  },
+  {
+    "source": "large.parquet",
+    "bytes": 14027816,
+    "count_sum_null_boolean": "PASS",
+    "filter_sort_limit": "PASS"
+  },
+  {
+    "cross_format_inner_left_join": "PASS"
+  },
+  {
+    "path_escape_symlink_default_off": "PASS"
+  }
+]
+<string>:54: DeprecationWarning: The 'reconnect' argument is deprecated. Create a new connection if you want to reconnect.

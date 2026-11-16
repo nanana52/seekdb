@@ -1,0 +1,13 @@
+{
+  "official_base": "5bce9e06d1281347ad61344e4b01fab9158c58a2",
+  "AI": "unmodified official mysqltest PASS",
+  "files": "official SQL body and expected output PASS; only remote fixture transfer replaced with local setup",
+  "large_files": "100k CSV/JSONL/Parquet aggregate/filter/sort/limit PASS",
+  "joins": "cross-format inner/left join PASS",
+  "security": "default-off, secure_file_priv, traversal and symlink rejection PASS",
+  "CSV_options": "native SQL named options and COPY dialect roundtrip PASS",
+  "Parquet": "bounded native page streaming, rowgroups and column projection",
+  "FTS": "604 actual TOKENIZE cases plus all Unicode scalar classification equivalence PASS; benchmark mixed",
+  "AI_column": "NOT_IMPLEMENTED; do not claim 160/160",
+  "source_build_identity": "all modified Windows and WSL source hashes matched"
+}

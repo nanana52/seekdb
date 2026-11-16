@@ -1,0 +1,6 @@
+SOCKET /opt/oceanbase_completion_20261116/seekdb_runtime_abi_fixed/run/sql.sock
+SECURE_FILE_ROOT_CONFIGURED
+FILE_SQL_OFFICIAL_BODY_COMPARE_EXIT 0
+ok
+
+

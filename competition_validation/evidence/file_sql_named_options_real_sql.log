@@ -1,0 +1,4 @@
+NAMED_SQL select id,name,flag,`optional` from read_csv('/opt/oceanbase_completion_20261116/seekdb_runtime_abi_fixed/data_for_mysqltest_file_sql/named.csv', delimiter=';', quote='\'', escape='\\', nullstr='NA') order by id
+CSV_NAMED_OPTIONS_REAL_SQL_PASS ((1, "O'Brien", 1, None), (2, 'X;Y', 0, 'ok'))
+CSV_NAMED_OPTIONS_DESCRIBE_REAL_SQL_PASS (('id', 'BIGINT', 'NO', None, None, None), ('name', 'VARCHAR', 'NO', None, None, None), ('flag', 'BOOLEAN', 'NO', None, None, None), ('optional', 'VARCHAR', 'YES', None, None, None))
+CSV_HEADER_FALSE_REAL_SQL_PASS

@@ -39,7 +39,9 @@ public:
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
-      is_inited_(false)
+      is_inited_(false),
+      ascii_fast_(false),
+      ascii_pos_(0)
   {}
   ~ObBEngFTParser() { reset(); }
 
@@ -63,6 +65,8 @@ private:
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
   bool is_inited_;
+  bool ascii_fast_;
+  int64_t ascii_pos_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);
 };
