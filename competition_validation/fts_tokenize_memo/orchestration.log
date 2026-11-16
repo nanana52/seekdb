@@ -1,0 +1,93 @@
+FTS_TOKEN_EQUIVALENCE_PASS before 1812
+FTS_MEMO_BENCH before ========================================
+FTS Large Benchmark Report
+========================================
+timestamp:              2026-11-16 19:21:49
+label:                  before
+git_head:               unknown
+git_dirty:              1
+rows:                   20000
+batch:                  500
+rounds:                 3000
+query_rounds:           200
+samples:                3
+warmup:                 30
+skip_load:              0
+----------------------------------------
+select1_avg_ms:         0.1083
+select1_stdev_ms:       0.0076
+raw_load_sec:           0.258
+raw_load_rows_per_sec:  77519.4
+build_ik_all_sec:       8.089
+build_ik_content_sec:   6.965
+build_beng_en_sec:      3.748
+build_total_sec:        18.817
+----------------------------------------
+tokenize_ik_avg_ms:     0.2619
+tokenize_ik_median_ms:  0.2626
+tokenize_ik_stdev_ms:   0.0055
+tokenize_beng_avg_ms:   0.1628
+tokenize_beng_median_ms:0.1663
+tokenize_beng_stdev_ms: 0.0072
+----------------------------------------
+query_cn_hits:          8001
+query_cn_avg_ms:        2.1554
+query_cn_stdev_ms:      0.1098
+query_beng_hits:        11000
+query_beng_avg_ms:      2.8909
+query_beng_stdev_ms:    0.0313
+query_mixed_hits:       7332
+query_mixed_avg_ms:     2.2455
+query_mixed_stdev_ms:   0.0193
+query_limit_hits:       20
+query_limit_avg_ms:     2.6057
+query_limit_stdev_ms:   0.1186
+========================================
+
+FTS_TOKEN_EQUIVALENCE_PASS after 1812
+FTS_MEMO_BENCH after ========================================
+FTS Large Benchmark Report
+========================================
+timestamp:              2026-11-16 19:22:24
+label:                  after
+git_head:               unknown
+git_dirty:              1
+rows:                   20000
+batch:                  500
+rounds:                 3000
+query_rounds:           200
+samples:                3
+warmup:                 30
+skip_load:              0
+----------------------------------------
+select1_avg_ms:         0.1011
+select1_stdev_ms:       0.0027
+raw_load_sec:           0.348
+raw_load_rows_per_sec:  57471.3
+build_ik_all_sec:       8.935
+build_ik_content_sec:   7.180
+build_beng_en_sec:      3.972
+build_total_sec:        20.109
+----------------------------------------
+tokenize_ik_avg_ms:     0.1345
+tokenize_ik_median_ms:  0.1339
+tokenize_ik_stdev_ms:   0.0018
+tokenize_beng_avg_ms:   0.1159
+tokenize_beng_median_ms:0.1150
+tokenize_beng_stdev_ms: 0.0025
+----------------------------------------
+query_cn_hits:          8001
+query_cn_avg_ms:        2.1875
+query_cn_stdev_ms:      0.2029
+query_beng_hits:        11000
+query_beng_avg_ms:      3.2237
+query_beng_stdev_ms:    0.2525
+query_mixed_hits:       7332
+query_mixed_avg_ms:     2.4985
+query_mixed_stdev_ms:   0.2408
+query_limit_hits:       20
+query_limit_avg_ms:     3.0342
+query_limit_stdev_ms:   0.1166
+========================================
+
+PAIRED_FTS_TOKENIZE_OUTPUT_VALIDATION_COMPLETE

@@ -15,6 +15,8 @@
  */
 
 #include "sql/engine/expr/ob_expr_tokenize.h"
+#include <list>
+#include <string>
 
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
@@ -39,6 +41,31 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace {
+struct TokenizeMemo {
+  std::string text, parser, json;
+  ObCollationType collation;
+  size_t bytes() const { return sizeof(TokenizeMemo) + text.size() + parser.size() + json.size(); }
+};
+struct TokenizeMemoCache {
+  std::list<TokenizeMemo> entries;
+  size_t size = 0;
+  void insert(TokenizeMemo &&memo) {
+    const size_t bytes = memo.bytes();
+    if (bytes > 65536) { return; }
+    entries.push_front(std::move(memo));size += bytes;
+    while (entries.size() > 16 || size > 256 * 1024) {
+      size -= entries.back().bytes();entries.pop_back();
+    }
+  }
+};
+thread_local TokenizeMemoCache tokenize_memo;
+bool same_tokenize_bytes(const std::string &stored, const ObString &value) {
+  return stored.size() == static_cast<size_t>(value.length()) &&
+      (stored.empty() || MEMCMP(stored.data(), value.ptr(), value.length()) == 0);
+}
+}
+
 ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
     : ObStringExprOperator(alloc,
                            T_FUN_TOKENIZE,
@@ -60,16 +87,54 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   ObIJsonBase *json_result = nullptr;
   TokenizeParam param;
 
-  // check param num, which is checked in ObExprOperator::calc_result_typeN.
+  // A narrow fast path covers string input with the default options. All
+  // argument expressions are evaluated first. A cache entry exists only after
+  // full parameter validation and successful dictionary initialization.
+  ObDatum *text_value = nullptr, *parser_value = nullptr;
+  bool eligible = expr.arg_cnt_ >= 1 && expr.arg_cnt_ <= 2 &&
+      (expr.args_[0]->obj_meta_.get_type() == ObVarcharType ||
+       expr.args_[0]->obj_meta_.get_type() == ObCharType);
+  ObString source_text, source_parser;
+  if (eligible) {
+    if (OB_FAIL(expr.args_[0]->eval(ctx, text_value))) { return ret; }
+    source_text = text_value->is_null() ? ObString() : text_value->get_string();
+    if (expr.arg_cnt_ == 2) {
+      if (OB_FAIL(expr.args_[1]->eval(ctx, parser_value))) { return ret; }
+      if (!parser_value->is_null()) { source_parser = parser_value->get_string(); }
+    }
+    eligible = source_text.length() <= 8192 && source_parser.length() <= 256 &&
+        (expr.arg_cnt_ == 1 || parser_value->is_null() || !source_parser.empty());
+    if (eligible) {
+      for (auto hit = tokenize_memo.entries.begin(); hit != tokenize_memo.entries.end(); ++hit) {
+        if (hit->collation == expr.args_[0]->obj_meta_.get_collation_type() &&
+            same_tokenize_bytes(hit->text, source_text) && same_tokenize_bytes(hit->parser, source_parser)) {
+          tokenize_memo.entries.splice(tokenize_memo.entries.begin(), tokenize_memo.entries, hit);
+          const auto &bytes = tokenize_memo.entries.front().json;
+          ObString binary(bytes.size(), bytes.data());
+          return ObJsonExprHelper::pack_json_str_res(expr, ctx, expr_datum, binary);
+        }
+      }
+    }
+  }
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
   } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
+  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr, ctx, temp_allocator, json_result, expr_datum))) {
+  } else if (eligible && json_result != nullptr) {
+    ObString binary;
+    const int cache_ret = share::ObJsonWrapper::get_raw_binary(json_result, binary, &temp_allocator);
+    if (cache_ret == OB_SUCCESS && binary.length() <= 32768) {
+      try {
+        const auto copy = [](const ObString &value) {
+          return value.empty() ? std::string() : std::string(value.ptr(), value.length());
+        };
+        TokenizeMemo memo;
+        memo.text = copy(source_text);memo.parser = copy(source_parser);memo.json = copy(binary);
+        memo.collation = param.meta_.get_collation_type();
+        tokenize_memo.insert(std::move(memo));
+      } catch (...) { /* Optional memo allocation cannot fail the SQL call. */ }
+    }
   }
 
   return ret;
