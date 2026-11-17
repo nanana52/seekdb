@@ -1,3 +1,4 @@
+#include "observer/ai_service/ob_ai_column_native_worker.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -1349,6 +1350,8 @@ int ObServer::start()
   } else if (!stop_) {
     GCTX.status_ = SS_SERVING;
     GCTX.start_service_time_ = start_service_time;
+    const int ai_worker_ret = observer::ai_column::start_native_column_worker();
+    if (ai_worker_ret != OB_SUCCESS) { LOG_WARN("start asynchronous AI column worker failed", K(ai_worker_ret)); }
     FLOG_INFO("[OBSERVER_NOTICE] observer start service", "start_service_time", GCTX.start_service_time_);
     LOG_DBA_INFO_V2(OB_SERVER_START_SUCCESS,
                     DBA_STEP_INC_INFO(server_start),
@@ -1526,6 +1529,7 @@ bool ObServer::is_stopped()
 
 void ObServer::set_stop()
 {
+  observer::ai_column::stop_native_column_worker();
   net_frame_.sql_nio_stop();
   stop_ = true;
   ob_service_.set_stop();

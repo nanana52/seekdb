@@ -2467,6 +2467,44 @@ all_objauth_mysql_def = dict(
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
 
+# 1135: asynchronous AI column definitions, immutable per definition version.
+all_ai_column_def = dict(
+    owner = 'seekdb_ai_column', table_name = '__all_ai_column', table_id = '1135',
+    table_type = 'SYSTEM_TABLE', gm_columns = ['gmt_create', 'gmt_modified'],
+    is_cluster_private = False, meta_record_in_sys = False,
+    rowkey_columns = [('table_id', 'int'), ('column_id', 'int')],
+    normal_columns = [
+      ('column_name', 'varchar:256', 'false'),
+      ('database_name', 'varchar:256', 'false'), ('table_name', 'varchar:256', 'false'),
+      ('normalized_expr', 'varchar:16384', 'false'), ('model_name', 'varchar:128', 'false'),
+      ('ai_function', 'varchar:32', 'false'), ('result_type', 'varchar:128', 'false'),
+      ('vector_dimension', 'int', 'false', 0), ('max_retries', 'int', 'false', 2),
+      ('definition_version', 'int', 'false', 1),
+      ('dependency_column_names', 'varchar:4096', 'false'),
+      ('state_column_id', 'int', 'false'), ('request_column_id', 'int', 'false'),
+      ('result_spec_column_id', 'int', 'false'),
+      ('state_column_name', 'varchar:256', 'false'),
+      ('request_column_name', 'varchar:256', 'false'),
+      ('result_spec_column_name', 'varchar:256', 'false')])
+def_table_schema(**all_ai_column_def)
+
+# 1136: durable tasks inserted by native DML triggers in the business transaction.
+all_ai_column_task_def = dict(
+    owner = 'seekdb_ai_column', table_name = '__all_ai_column_task', table_id = '1136',
+    table_type = 'SYSTEM_TABLE', gm_columns = ['gmt_create', 'gmt_modified'],
+    is_cluster_private = False, meta_record_in_sys = False,
+    rowkey_columns = [('table_id', 'int'), ('column_id', 'int'),
+                       ('request_id', 'varchar:36'), ('rowkey_predicate', 'varchar:1024')],
+    normal_columns = [
+      ('input_text', 'varchar:16384', 'true'), ('state', 'int', 'false', 1),
+      ('retry_count', 'int', 'false', 0), ('max_retries', 'int', 'false', 2),
+      ('eligible_ts', 'timestamp', 'false'), ('definition_version', 'int', 'false', 1),
+      ('owner_token', 'varchar:36', 'true'), ('lease_deadline', 'timestamp', 'true'),
+      ('result_sql', 'varchar:32768', 'true'), ('last_error', 'varchar:2048', 'true')])
+def_table_schema(**all_ai_column_task_def)
+
+
+
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders

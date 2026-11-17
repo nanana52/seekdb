@@ -1,3 +1,4 @@
+#include "observer/ai_service/ob_ai_column_native_worker.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -492,6 +493,35 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       if (OB_FAIL(execute_ctas(ctx, stmt))){
       }
     }
+    if (OB_SUCC(ret) && !res.do_nothing_) {
+      bool has_ai = false;
+      for (auto it = table_schema.column_begin(); it != table_schema.column_end(); ++it) {
+        has_ai = has_ai || share::ai_column::has_native_definition(**it);
+      }
+      if (has_ai) {
+        try {
+          ObSchemaGetterGuard guard;
+          const ObTableSchema *persisted = nullptr;
+          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+          } else if (OB_FAIL(guard.get_table_schema(res.table_id_, persisted))) {
+          } else if (persisted == nullptr) { ret = OB_ERR_UNEXPECTED; }
+          else {
+            const auto database = stmt.get_database_name();
+            const auto bound = share::ai_column::bind_native_table(*persisted,
+                std::string(database.ptr(), database.length()));
+            common::sqlclient::ObISQLConnectionGuard connection;
+            if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_owned_session(true, 0, connection))) {
+            } else {
+              for (const auto &statement : share::ai_column::build_transactional_trigger_plan(bound).create_statements) {
+                int64_t affected = 0;
+                if (OB_FAIL(connection->execute_write(observer::ai_column::native_sql_string(statement), affected, true))) { break; }
+              }
+              if (OB_SUCC(ret)) { ret = observer::ai_column::start_native_column_worker(); }
+            }
+          }
+        } catch (const std::exception &) { ret = OB_NOT_SUPPORTED; }
+      }
+    }
     SERVER_EVENT_ADD("ddl", "create table execute finish",
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
@@ -878,6 +908,46 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       "table_info", table_info_buffer,
       "schema_version", res.schema_version_);
     SQL_ENG_LOG(INFO, "finish alter table execute.", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(first_stmt));
+  }
+  if (OB_SUCC(ret)) {
+    bool added_ai=false;
+    for(auto it=alter_table_arg.alter_table_schema_.column_begin();it!=alter_table_arg.alter_table_schema_.column_end();++it) {
+      added_ai=added_ai || share::ai_column::has_native_definition(**it);
+    }
+    if(added_ai) {
+      try {
+        ObSchemaGetterGuard guard;const ObTableSchema *persisted=nullptr;
+        if(OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+        } else if(OB_FAIL(guard.get_table_schema(alter_table_arg.alter_table_schema_.get_table_id(),persisted))) {
+        } else if(!persisted) { ret=OB_ERR_UNEXPECTED; }
+        else {
+          const auto database=alter_table_arg.alter_table_schema_.get_origin_database_name();
+          const auto bound=share::ai_column::bind_native_table(*persisted,std::string(database.ptr(),database.length()));
+          common::sqlclient::ObISQLConnectionGuard connection;
+          if(OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_owned_session(true,0,connection))) {
+          } else {
+            for (const auto &kind : {"bi","ai","bu","au","ad"}) {
+              const auto trigger_name="__aic_"+std::to_string(bound.table_id)+"_"+kind;
+              const ObTriggerInfo *existing=nullptr;
+              const common::ObString name(trigger_name.size(),trigger_name.data());
+              if (OB_FAIL(guard.get_trigger_info(persisted->get_database_id(),name,existing))) { break; }
+              if (existing==nullptr) { continue; }
+              const auto drop="DROP TRIGGER "+share::ai_column::quote_identifier(bound.database)+"."+
+                share::ai_column::quote_identifier(trigger_name);
+              int64_t affected=0;
+              if (OB_FAIL(connection->execute_write(observer::ai_column::native_sql_string(drop),affected,true))) { break; }
+            }
+            if (OB_SUCC(ret)) {
+              for (const auto &sql : share::ai_column::build_transactional_trigger_plan(bound).create_statements) {
+                int64_t affected=0;
+                if (OB_FAIL(connection->execute_write(observer::ai_column::native_sql_string(sql),affected,true))) { break; }
+              }
+            }
+            if(OB_SUCC(ret))ret=observer::ai_column::start_native_column_worker();
+          }
+        }
+      } catch(...) { ret=OB_NOT_SUPPORTED; }
+    }
   }
   return ret;
 }

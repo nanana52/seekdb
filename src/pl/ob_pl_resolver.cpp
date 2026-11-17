@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -1233,7 +1234,7 @@ int ObPLResolver::build_record_type_by_table_schema(ObSchemaGetterGuard &schema_
     ObTableSchema::const_column_iterator cs_iter_end = table_schema->column_end();
     for (; OB_SUCC(ret) && cs_iter != cs_iter_end; cs_iter++) {
       const ObColumnSchemaV2 &column_schema = **cs_iter;
-      if (!column_schema.is_hidden()) {
+      if (!column_schema.is_hidden() || share::ai_column::is_native_hidden_name(column_schema.get_column_name_str())) {
         ObPLDataType pl_type;
         ObDataType data_type;
         data_type.set_meta_type(column_schema.get_meta_type());

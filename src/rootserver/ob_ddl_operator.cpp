@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -2870,6 +2871,20 @@ int ObDDLOperator::drop_table(
     }
   }
 
+  if (OB_SUCC(ret) && table_schema.is_user_table()) {
+    bool has_ai=false;
+    for(auto it=table_schema.column_begin();it!=table_schema.column_end();++it) {
+      has_ai=has_ai || share::ai_column::has_native_definition(**it);
+    }
+    if(has_ai) {
+      int64_t affected=0;
+      const std::string condition=" WHERE table_id="+std::to_string(table_schema.get_table_id());
+      if(OB_FAIL(trans.write(("DELETE FROM oceanbase.__all_ai_column_task"+condition).c_str(),affected))) {
+      } else if(!is_truncate_table) {
+        ret=trans.write(("DELETE FROM oceanbase.__all_ai_column"+condition).c_str(),affected);
+      }
+    }
+  }
   return ret;
 }
 

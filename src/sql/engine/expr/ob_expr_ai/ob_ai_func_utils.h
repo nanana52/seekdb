@@ -17,7 +17,7 @@
 #ifndef OB_AI_FUNC_UTILS_H_
 #define OB_AI_FUNC_UTILS_H_
 
-#include "ob_ai_func.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_func.h"
 #include "share/json/ob_json_helper.h"
 #include "lib/encode/ob_base64_encode.h"
 
@@ -353,6 +353,7 @@ public:
    virtual ~ObAIFuncModel() {}
    // completion
    int call_completion(ObString &prompt, ObJsonObject *config, ObString &result);
+   int call_completion_with_system(ObString &system, ObString &prompt, ObJsonObject *config, ObString &result);
    int call_completion_vector(ObArray<ObString> &prompts, ObJsonObject *config, ObArray<ObString> &results);
    // dense_embedding
    int call_dense_embedding(ObString &content, ObJsonObject *config, ObString &result);

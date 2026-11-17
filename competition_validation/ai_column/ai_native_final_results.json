@@ -1,0 +1,27 @@
+[
+  {
+    "test": "ai_column_ddl",
+    "exit": 0,
+    "seconds": 2.84
+  },
+  {
+    "test": "ai_column_t1_dml",
+    "exit": 0,
+    "seconds": 8.0
+  },
+  {
+    "test": "ai_column_worker",
+    "exit": 0,
+    "seconds": 5.37
+  },
+  {
+    "test": "ai_column_vector_index",
+    "exit": 0,
+    "seconds": 4.16
+  },
+  {
+    "test": "ai_column_retry_strict",
+    "exit": 0,
+    "seconds": 1.67
+  }
+]

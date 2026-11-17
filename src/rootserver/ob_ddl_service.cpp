@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -7830,6 +7831,36 @@ int ObDDLService::add_new_column_to_table_schema(
         }
       }
     }
+  }
+  if (OB_SUCC(ret) && update_inner_table && share::ai_column::has_native_definition(alter_column_schema)) {
+    try {
+      if (OB_FAIL(share::ai_column::validate_native_models(new_table_schema, schema_guard))) {
+      } else {
+        const uint64_t previous_max = new_table_schema.get_max_used_column_id();
+        if (OB_FAIL(share::ai_column::add_native_hidden_columns(new_table_schema))) {
+        } else {
+          for (auto it=new_table_schema.column_begin();OB_SUCC(ret)&&it!=new_table_schema.column_end();++it) {
+            if ((*it)->get_column_id() > previous_max) {
+              ret=ddl_operator->insert_single_column(*trans,new_table_schema,**it);
+            }
+          }
+          if (OB_SUCC(ret)) {
+            const ObDatabaseSchema *database=nullptr;
+            if (OB_FAIL(schema_guard.get_database_schema(new_table_schema.get_database_id(),database))) {
+            } else if (database==nullptr) { ret=OB_ERR_UNEXPECTED; }
+            else {
+              const auto name=database->get_database_name_str();
+              auto bound=share::ai_column::bind_native_table(new_table_schema,std::string(name.ptr(),name.length()));
+              bound.columns.erase(std::remove_if(bound.columns.begin(),bound.columns.end(),
+                [&](const share::ai_column::BoundAIColumn &column){return column.column_id!=alter_column_schema.get_column_id();}),bound.columns.end());
+              for (const auto &sql:share::ai_column::native_catalog_insert_statements(bound)) {
+                int64_t affected=0;if(OB_FAIL(trans->write(sql.c_str(),affected)))break;
+              }
+            }
+          }
+        }
+      }
+    } catch (const std::exception &) { ret=OB_NOT_SUPPORTED; }
   }
   return ret;
 }

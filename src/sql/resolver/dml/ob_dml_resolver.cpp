@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -1845,6 +1846,10 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       || OB_ISNULL(params_.expr_factory_)
       || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (share::ai_column::is_native_hidden_name(column_name)) {
+    include_hidden = true;
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(!table_item.is_basic_table()
                          && !table_item.is_fake_cte_table())) {
     ret = OB_ERR_UNEXPECTED;

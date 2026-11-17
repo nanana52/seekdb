@@ -304,6 +304,7 @@ _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = sql_singleton_unity_groups(
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
+    ":competition_file_scan_headers",
     "//rust:config_headers",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
@@ -396,4 +397,17 @@ filegroup(
         "//src/sql/parser:sql_server_parser_build",
     ],
     tags = ["manual"],
+)
+
+
+# Competition File SQL helper headers used by the parser and JSON_TABLE runtime.
+# Do not bring the legacy sql/BUILD.bazel into the frozen Bazel baseline.
+cc_library(
+    name = "competition_file_scan_headers",
+    hdrs = [
+        "engine/basic/ob_file_scan_core.h",
+        "engine/basic/ob_file_stream_reader.h",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/sql/parser:__pkg__"],
 )

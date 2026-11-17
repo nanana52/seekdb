@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -950,6 +951,13 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       } else if (OB_FAIL(resolve_primary_key_node_in_heap_table(primary_node_in_heap_table, stats, resolved_cols))) {
       }
     }
+  }
+  if (OB_SUCC(ret) && resolve_rule == RESOLVE_ALL) {
+    auto *create_stmt = static_cast<ObCreateTableStmt *>(stmt_);
+    if (schema_checker_ == nullptr || schema_checker_->get_schema_guard() == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(share::ai_column::validate_native_models(create_stmt->get_create_table_arg().schema_,
+        *schema_checker_->get_schema_guard()))) {
+    } else { ret = share::ai_column::add_native_hidden_columns(create_stmt->get_create_table_arg().schema_); }
   }
   return ret;
 }

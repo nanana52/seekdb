@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -2313,7 +2314,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
         } else if (OB_ISNULL(column_schema = *cs_iter)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          is_hidden = column_schema->is_hidden();
+          is_hidden = column_schema->is_hidden() && !share::ai_column::is_native_hidden_name(column_schema->get_column_name_str());
           is_gen_col = column_schema->is_generated_column();
           is_gen_col_dep = column_schema->has_generated_column_deps();
           is_update = has_exist_in_array(updated_column_ids, column_schema->get_column_id());

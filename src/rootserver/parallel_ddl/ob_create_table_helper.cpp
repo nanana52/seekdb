@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -863,6 +864,25 @@ int ObCreateTableHelper::operate_schemas_() {
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_FAIL(inner_create_table_(&arg_.ddl_stmt_str_,
                                          replace_mock_fk_parent_table_id_))) {
+  }
+  if (OB_SUCC(ret) && !new_tables_.empty()) {
+    try {
+      const auto &schema = new_tables_.at(0);
+      bool has_ai = false;
+      for (auto it = schema.column_begin(); it != schema.column_end(); ++it) {
+        has_ai = has_ai || share::ai_column::has_native_definition(**it);
+      }
+      if (has_ai) {
+        const auto database = arg_.db_name_;
+        const auto table = share::ai_column::bind_native_table(schema,
+            std::string(database.ptr(), database.length()));
+        for (const auto &statement : share::ai_column::native_catalog_insert_statements(table)) {
+          int64_t affected = 0;
+          if (OB_FAIL(get_trans_().write(statement.c_str(), affected))) { break; }
+          else if (affected != 1) { ret = OB_ERR_UNEXPECTED;break; }
+        }
+      }
+    } catch (const std::exception &) { ret = OB_NOT_SUPPORTED; }
   }
   return ret;
 }

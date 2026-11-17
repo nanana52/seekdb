@@ -478,6 +478,16 @@ int ObDelUpdResolver::check_update_vector_col_with_vector_index(const ObTableSch
       }
     }
   }
+  // BEFORE UPDATE can assign an indexed vector even when the original SET
+  // list only changes one of its dependencies. Refresh its generated VID as
+  // for an explicit vector assignment, so the delta log never reuses an old ID.
+  if (OB_SUCC(ret) && !update_with_vector_index) {
+    bool before_update = false;
+    if (OB_FAIL(table_schema->has_before_update_row_trigger(*schema_guard, before_update))) {
+    } else if (before_update &&
+               OB_FAIL(table_schema->check_has_vec_domain_index(*schema_guard, update_with_vector_index))) {
+    }
+  }
   return ret;
 }
 

@@ -187,11 +187,20 @@ sql_parser_driver_unity = seekdb_generated_unity_source(
 )
 
 cc_library(
+    name = "competition_file_sql_rewrite_headers",
+    hdrs = ["ob_file_sql_rewrite.h"],
+    deps = ["//src/sql:competition_file_scan_headers"],
+    tags = ["manual"],
+)
+
+cc_library(
     name = "_server_parser_cxx",
     srcs = [
         sql_parser_driver_unity,
     ] + _PARSER_CXX_STANDALONE_SOURCES,
     implementation_deps = [
+        ":competition_file_sql_rewrite_headers",
+        "//src/sql:competition_file_scan_headers",
         ":_sql_parser_driver_unity_members",
         ":parser_internal_headers",
         ":parser_public_headers",

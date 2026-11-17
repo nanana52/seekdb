@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_schema_adapter.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -83,7 +84,7 @@ int PCVPlSchemaObj::deep_copy_column_infos(const ObTableSchema *schema)
     int64_t real_column_cnt = 0;
     for (; OB_SUCC(ret) && cs_iter != cs_iter_end; cs_iter++) {
       const ObColumnSchemaV2 &column_schema = **cs_iter;
-      if (!column_schema.is_hidden()) {
+      if (!column_schema.is_hidden() || share::ai_column::is_native_hidden_name(column_schema.get_column_name_str())) {
         real_column_cnt++;
       }
     }
@@ -98,7 +99,7 @@ int PCVPlSchemaObj::deep_copy_column_infos(const ObTableSchema *schema)
         cs_iter_end = schema->column_end();
         for (; OB_SUCC(ret) && cs_iter != cs_iter_end; cs_iter++) {
           const ObColumnSchemaV2 &column_schema = **cs_iter;
-          if (column_schema.is_hidden()) {
+          if (column_schema.is_hidden() && !share::ai_column::is_native_hidden_name(column_schema.get_column_name_str())) {
             // do nothing
           } else {
             if (nullptr == (obj_buf = inner_alloc_->alloc(sizeof(ObPLTableColumnInfo)))) {
@@ -393,7 +394,7 @@ int ObPLObjectValue::obtain_new_column_infos(share::schema::ObSchemaGetterGuard 
     ObTableSchema::const_column_iterator cs_iter_end = table_schema->column_end();
     for (; OB_SUCC(ret) && cs_iter != cs_iter_end; cs_iter++) {
       const ObColumnSchemaV2 &column_schema = **cs_iter;
-      if (column_schema.is_hidden()) {
+      if (column_schema.is_hidden() && !share::ai_column::is_native_hidden_name(column_schema.get_column_name_str())) {
         // do nothing
       } else {
         column_info.column_id_ = column_schema.get_column_id();

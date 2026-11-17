@@ -1,3 +1,4 @@
+#include "observer/ai_service/ob_ai_column_query_gate.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -790,6 +791,10 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   bool need_response_error = true;
   const ObString &sql = ctx_.multi_stmt_item_.get_sql();
   const bool enable_sqlstat = session.is_sqlstat_enabled();
+  std::string ai_rewritten_query;
+  const int ai_gate = observer::ai_column::prepare_native_column_query(session, sql, ai_rewritten_query);
+  const ObString effective_sql = ai_rewritten_query.empty() ? sql : observer::ai_column::native_sql_string(ai_rewritten_query);
+
   single_process_timestamp_ = ObTimeUtility::current_time();
   /* !!!
    * Note that req_timeinfo_guard must be placed before result
@@ -843,7 +848,11 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       } else if (OB_ISNULL(ctx_.schema_guard_)) {
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(set_session_active(sql, session, single_process_timestamp_))) {
-      } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_query(sql, ctx_, result))) {
+      } else if (ai_gate != OB_SUCCESS) {
+        // A readiness rejection is a statement error, not a connection failure.
+        result.get_exec_context().set_need_disconnect(false);
+        ret = ai_gate;
+      } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_query(effective_sql, ctx_, result))) {
         exec_start_timestamp_ = ObTimeUtility::current_time();
         if (!THIS_WORKER.need_retry()) {
           int cli_ret = OB_SUCCESS;

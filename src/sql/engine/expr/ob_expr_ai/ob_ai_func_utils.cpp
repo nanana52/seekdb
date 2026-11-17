@@ -1337,13 +1337,19 @@ int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &mod
 
 int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObString &result)
 {
+  ObString system;
+  return call_completion_with_system(system, prompt, config, result);
+}
+
+int ObAIFuncModel::call_completion_with_system(ObString &system, ObString &prompt, ObJsonObject *config, ObString &result)
+{
   int ret = OB_SUCCESS;
   ObArray<ObString> headers;
   ObJsonObject *body = nullptr;
   ObJsonObject *response = nullptr;
   ObIJsonBase *result_base = nullptr;
   ObAIFuncIComplete *complete_provider = nullptr;
-  ObString prompt_str;
+  ObString prompt_str(system);
   ObString result_str;
   ObAIFuncClient client;
   ObString unencrypted_access_key;

@@ -1,3 +1,4 @@
+#include "share/ai_service/ob_ai_column_definition.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -1964,6 +1965,25 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
           }
         }
       }
+    }
+  }
+  if (OB_SUCC(ret) && node->num_child_ == 8) {
+    try {
+      const std::string declaration(node->str_value_, node->str_len_);
+      const auto tokens = share::ai_column::tokenize_definition(declaration);
+      const auto definition = share::ai_column::parse_native_column(declaration, tokens, 0, tokens.size());
+      if (!definition.ai) { ret = OB_INVALID_ARGUMENT; }
+      else {
+        const std::string metadata = "__seekdb_ai_column_v1:" + declaration;
+        ret = column.set_comment(ObString(metadata.size(), metadata.data()));
+        column.set_nullable(true);
+      }
+    } catch (const share::ai_column::VectorDimensionMismatch &error) {
+      ret = OB_ERR_INVALID_VECTOR_DIM;
+      LOG_USER_ERROR(OB_ERR_INVALID_VECTOR_DIM,error.expected,error.actual);
+    } catch (const std::exception &) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "AI COLUMN declaration or options");
     }
   }
   return ret;
