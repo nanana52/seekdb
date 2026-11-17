@@ -1350,7 +1350,7 @@ int ObServer::start()
   } else if (!stop_) {
     GCTX.status_ = SS_SERVING;
     GCTX.start_service_time_ = start_service_time;
-    const int ai_worker_ret = observer::ai_column::start_native_column_worker();
+    const int ai_worker_ret = observer::ai_column::resume_native_column_worker_if_needed();
     if (ai_worker_ret != OB_SUCCESS) { LOG_WARN("start asynchronous AI column worker failed", K(ai_worker_ret)); }
     FLOG_INFO("[OBSERVER_NOTICE] observer start service", "start_service_time", GCTX.start_service_time_);
     LOG_DBA_INFO_V2(OB_SERVER_START_SUCCESS,

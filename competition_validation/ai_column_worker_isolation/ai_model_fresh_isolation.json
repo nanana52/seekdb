@@ -1,0 +1,7 @@
+{
+  "ddl_cycles": 30,
+  "max_cycle_sec": 5.1611809599999106,
+  "official_ai_function_exit": 0,
+  "runtime": "fresh isolated database",
+  "timeout_changed": false
+}

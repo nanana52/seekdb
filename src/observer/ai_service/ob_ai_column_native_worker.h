@@ -223,6 +223,21 @@ inline int start_native_column_worker() {
   std::call_once(once,[&]{status=native_column_worker().start();});
   return status;
 }
+// Skip polling on fresh databases; DDL starts workers for new AI columns.
+// Persisted definitions resume the durable outbox after a server restart.
+inline int resume_native_column_worker_if_needed() {
+  ObISQLConnectionGuard guard;
+  int ret=ObInnerSQLConnection::create_connection_with_owned_session(false,0,guard);
+  if (ret!=OB_SUCCESS) { return ret; }
+  common::ObISQLClient::ReadResult result;
+  const std::string query="SELECT 1 AS configured FROM oceanbase.__all_ai_column LIMIT 1";
+  ret=guard->execute_read(native_sql_string(query),result,true);
+  if (ret!=OB_SUCCESS) { return ret; }
+  auto *row=result.get_result();
+  if (row==nullptr) { return common::OB_ERR_UNEXPECTED; }
+  ret=row->next();
+  return ret==common::OB_ITER_END ? OB_SUCCESS : ret==OB_SUCCESS ? start_native_column_worker() : ret;
+}
 inline void stop_native_column_worker() {
   native_column_worker().stop();
   native_column_worker().wait();
