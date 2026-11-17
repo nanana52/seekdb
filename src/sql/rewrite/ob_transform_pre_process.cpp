@@ -32,6 +32,28 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+namespace {
+bool fts_parent_only_counts_rows(const ObDMLStmt *inner, const ObDMLStmt *parent) {
+  if (inner == nullptr || parent == nullptr || !inner->is_select_stmt() ||
+      !parent->is_select_stmt()) { return false; }
+  const auto *outer = static_cast<const ObSelectStmt *>(parent);
+  const auto *sub = static_cast<const ObSelectStmt *>(inner);
+  if (!outer->is_single_table_stmt() || !outer->is_scala_group_by() ||
+      outer->get_aggr_items().count() != 1 || outer->get_select_items().count() != 1 ||
+      !outer->get_condition_exprs().empty() || outer->has_having() ||
+      outer->has_window_function() || outer->is_set_stmt() ||
+      sub->has_group_by() || sub->has_distinct() || sub->has_window_function() ||
+      sub->is_set_stmt() || sub->has_for_update() || sub->is_fetch_with_ties() ||
+      sub->get_limit_percent_expr() != nullptr) { return false; }
+  const auto *table = outer->get_table_item(0);
+  const auto *count = outer->get_aggr_items().at(0);
+  return table != nullptr && table->is_generated_table() && table->ref_query_ == inner &&
+      count != nullptr && count->get_expr_type() == T_FUN_COUNT &&
+      count->get_real_param_count() == 0 && !count->is_param_distinct() &&
+      outer->get_select_item(0).expr_ == count;
+}
+}
+
 int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                               ObDMLStmt *&stmt,
                                               bool &trans_happened)
@@ -177,8 +199,31 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         trans_happened |= is_happened;
       }
     }
+    if (OB_SUCC(ret) && parent_stmts.count() > 0 &&
+        fts_parent_only_counts_rows(stmt, parent_stmts.at(parent_stmts.count() - 1).stmt_)) {
+      auto *sub = static_cast<ObSelectStmt *>(stmt);
+      // Unused plain-column projections have no side effects. The direct
+      // COUNT(*) parent needs cardinality only, so no base-row fetch is needed.
+      bool only_columns = !sub->get_select_items().empty();
+      for (int64_t i = 0; only_columns && i < sub->get_select_items().count(); ++i) {
+        only_columns = sub->get_select_item(i).expr_ != nullptr &&
+                       sub->get_select_item(i).expr_->is_column_ref_expr();
+      }
+      if (only_columns) {
+        ObConstRawExpr *one = nullptr;
+        if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_, ObIntType, 1, one))) {
+        } else {
+          for (int64_t i = 0; i < sub->get_select_items().count(); ++i) {
+            sub->get_select_item(i).expr_ = one;
+          }
+          trans_happened = true;
+        }
+      }
+    }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
+          !(parent_stmts.count() > 0 && fts_parent_only_counts_rows(
+              stmt, parent_stmts.at(parent_stmts.count() - 1).stmt_)) &&
           OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;

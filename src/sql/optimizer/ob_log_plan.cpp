@@ -12287,7 +12287,7 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     // (the existing implicit score ordering can affect which rows survive).
     if (match_against->get_mode_flag() == NATURAL_LANGUAGE_MODE &&
         get_stmt()->is_select_stmt() && get_stmt()->get_match_exprs().count() == 1 &&
-        !get_stmt()->has_limit() && !get_stmt()->has_order_by()) {
+        !get_stmt()->has_order_by()) {
       ObSEArray<ObRawExpr *, 16> observed;
       ObStmtExprGetter visitor;
       visitor.set_relation_scope();
