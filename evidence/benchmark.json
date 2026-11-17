@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "scope": "Local native development benchmark; not formal cgroup score or rank",
+  "rows": 10000,
+  "dimensions": 128,
+  "queries": 1000,
+  "batch": 100,
+  "topk": 10,
+  "filtered_queries": 500,
+  "write_sec": 1.7323541410005419,
+  "query_sec": 0.6737835259991698,
+  "query_qps": 1484.1562036071984,
+  "unfiltered_recall_at_10": 1.0,
+  "filtered_recall_at_10": 1.0,
+  "all_distances_match_current_float32_rows": true,
+  "committed_data_survives_SIGKILL": true,
+  "process_peak_rss_bytes": 16793600,
+  "data_bytes": 10733482
+}

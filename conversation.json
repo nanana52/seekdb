@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "synthetic": false,
+  "scope": "Actual MiniVectorDB development in this conversation on2026-11-17; concise Agent summaries and unmodified captured test outputs. Not a transcript of hidden chain of thought.",
+  "conversations": [
+    {
+      "id": "U1",
+      "source": "human_user",
+      "role": "student",
+      "content": "?????????????????????????????????????????????????????",
+      "scope": "Actual contest-wide request; no technical solution asserted."
+    },
+    {
+      "id": "U2",
+      "source": "human_user",
+      "role": "student",
+      "content": "???????????????????????????",
+      "context": "The Agent asked the user for a prediction about loss of acknowledged commits after forced termination and a proposed test. The user declined; implementation and verification below are the Agent work."
+    },
+    {
+      "id": "A1",
+      "source": "agent",
+      "role": "assistant",
+      "record_type": "concise_plan_summary",
+      "content": "????JSONL?????mysqltest???????SQL????????????????????????????????????????????29????????"
+    },
+    {
+      "id": "A2",
+      "source": "agent",
+      "role": "assistant",
+      "record_type": "design_summary",
+      "content": "????/???/????????????WAL?fdatasync??????????????????????????????????????????????????????"
+    },
+    {
+      "id": "A3",
+      "source": "agent",
+      "role": "assistant",
+      "record_type": "design_review_summary",
+      "content": "????????????????????pending?????????????????????????????????COMMIT???????????????????????????????????"
+    },
+    {
+      "id": "A4",
+      "source": "agent",
+      "role": "assistant",
+      "record_type": "implementation_change_summary",
+      "content": "????20??????UPDATE??????????????????????????????????AND?NOT NULL?????????????Docker?????????"
+    },
+    {
+      "id": "A5",
+      "source": "agent",
+      "role": "assistant",
+      "record_type": "verification_method",
+      "content": "??Python???????????????float32?????????????L2????/?????????????????????????SIGKILL????????NumPy???????????????????????"
+    },
+    {
+      "id": "A6",
+      "source": "agent",
+      "role": "assistant",
+      "record_type": "tradeoff_summary",
+      "content": "??????????????????exact?ann????????????????????????????HNSW??????AVX2??CPU????????????????"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "T1",
+      "source": "tool_result",
+      "status": "executed",
+      "artifact": "public_native.json",
+      "content": "{\n  \"scope\": \"public-protocol-check\",\n  \"passed\": true,\n  \"cases\": [\n    {\n      \"id\": \"sql_crud\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 56\n    },\n    {\n      \"id\": \"sql_comparisons\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 14\n    },\n    {\n      \"id\": \"sql_ordering\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 13\n    },\n    {\n      \"id\": \"sql_empty\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 9\n    },\n    {\n      \"id\": \"sql_primary_key\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 14\n    },\n    {\n      \"id\": \"sql_unicode\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 15\n    },\n    {\n      \"id\": \"sql_bigint\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 16\n    },\n    {\n      \"id\": \"sql_unsupported\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 11\n    },\n    {\n      \"id\": \"storage_restart\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 23\n    },\n    {\n      \"id\": \"vector_euclidean\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 10\n    },\n    {\n      \"id\": \"transaction_commit\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 12\n    },\n    {\n      \"id\": \"transaction_rollback\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 10\n    },\n    {\n      \"id\": \"storage_mutations\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 18\n    },\n    {\n      \"id\": \"storage_multiple_tables\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 23\n    },\n    {\n      \"id\": \"vector_ties_and_filter\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 14\n    },\n    {\n      \"id\": \"vector_float32\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 13\n    },\n    {\n      \"id\": \"vector_index_maintenance\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 25\n    },\n    {\n      \"id\": \"transaction_failed_insert\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 17\n    },\n    {\n      \"id\": \"transaction_autocommit_atomic\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 15\n    },\n    {\n      \"id\": \"transaction_shutdown_rollback\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 15\n    }\n  ],\n  \"note\": \"Local diagnostic only; no performance/Agent scores or platform callbacks.\"\n}\n",
+      "artifact_sha256": "889f451192c99beb35063e7321de3cf4427b80af2e190cadc0a8b810635fa921"
+    },
+    {
+      "id": "T2",
+      "source": "tool_result",
+      "status": "executed",
+      "artifact": "public_docker.json",
+      "content": "{\n  \"scope\": \"public-protocol-check\",\n  \"passed\": true,\n  \"cases\": [\n    {\n      \"id\": \"sql_crud\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2188\n    },\n    {\n      \"id\": \"sql_comparisons\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2337\n    },\n    {\n      \"id\": \"sql_ordering\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2457\n    },\n    {\n      \"id\": \"sql_empty\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2588\n    },\n    {\n      \"id\": \"sql_primary_key\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2695\n    },\n    {\n      \"id\": \"sql_unicode\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2517\n    },\n    {\n      \"id\": \"sql_bigint\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2545\n    },\n    {\n      \"id\": \"sql_unsupported\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2369\n    },\n    {\n      \"id\": \"storage_restart\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 3702\n    },\n    {\n      \"id\": \"vector_euclidean\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2592\n    },\n    {\n      \"id\": \"transaction_commit\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2966\n    },\n    {\n      \"id\": \"transaction_rollback\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2765\n    },\n    {\n      \"id\": \"storage_mutations\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 4100\n    },\n    {\n      \"id\": \"storage_multiple_tables\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 3578\n    },\n    {\n      \"id\": \"vector_ties_and_filter\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2084\n    },\n    {\n      \"id\": \"vector_float32\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 2150\n    },\n    {\n      \"id\": \"vector_index_maintenance\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 3339\n    },\n    {\n      \"id\": \"transaction_failed_insert\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 3256\n    },\n    {\n      \"id\": \"transaction_autocommit_atomic\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 3360\n    },\n    {\n      \"id\": \"transaction_shutdown_rollback\",\n      \"status\": \"PASS\",\n      \"message\": \"\",\n      \"duration_ms\": 3430\n    }\n  ],\n  \"note\": \"Local diagnostic only; no performance/Agent scores or platform callbacks.\"\n}\n",
+      "artifact_sha256": "31f24c8aa3a621a0ffc5986dd4bcc8eed4d689f453e6056556764ad838014acf"
+    },
+    {
+      "id": "T3",
+      "source": "tool_result",
+      "status": "executed",
+      "artifact": "oracle_recovery.json",
+      "content": "{\n  \"status\": \"PASS\",\n  \"scope\": \"independent deterministic Python state oracle and actual process-kill tests\",\n  \"seed\": 817311,\n  \"topk_comparisons\": 800,\n  \"transaction_epochs\": 7,\n  \"committed_then_SIGKILL\": true,\n  \"uncommitted_SIGKILL_rollback\": true,\n  \"partial_tail_recovery_idempotent\": true,\n  \"recovery_interrupted_repeatedly\": 6,\n  \"bigint_exact\": true,\n  \"float32_exact_storage\": true,\n  \"transaction_flat_index_relocation\": true,\n  \"invalid_vector_statement_atomicity\": true\n}",
+      "artifact_sha256": "4713de65aca7487755519aa05f14880404f928549c77e3a0dc7983993a8dafe9"
+    },
+    {
+      "id": "T4",
+      "source": "tool_result",
+      "status": "executed",
+      "artifact": "benchmark.json",
+      "content": "{\n  \"status\": \"PASS\",\n  \"scope\": \"Local native development benchmark; not formal cgroup score or rank\",\n  \"rows\": 10000,\n  \"dimensions\": 128,\n  \"queries\": 1000,\n  \"batch\": 100,\n  \"topk\": 10,\n  \"filtered_queries\": 500,\n  \"write_sec\": 1.7323541410005419,\n  \"query_sec\": 0.6737835259991698,\n  \"query_qps\": 1484.1562036071984,\n  \"unfiltered_recall_at_10\": 1.0,\n  \"filtered_recall_at_10\": 1.0,\n  \"all_distances_match_current_float32_rows\": true,\n  \"committed_data_survives_SIGKILL\": true,\n  \"process_peak_rss_bytes\": 16793600,\n  \"data_bytes\": 10733482\n}",
+      "artifact_sha256": "cefe0548f80f64e75850cb82b87c1fcfa0937d58e82e98d2c5c31420546c0409"
+    },
+    {
+      "id": "T5",
+      "source": "tool_result",
+      "status": "executed",
+      "artifact": "large_disk.json",
+      "content": "{\n  \"status\": \"PASS\",\n  \"scope\": \"Actual network-none readonly-root Docker2CPU2GiB/no-swap128PID; >memory database with real SIGKILL and restart\",\n  \"rows\": 64000,\n  \"payload_chars\": 35000,\n  \"committed_wal_bytes\": 2241876675,\n  \"container_memory_limit_bytes\": 2147483648,\n  \"data_exceeds_memory\": true,\n  \"write_sec\": 47.7957743149891,\n  \"recovery_sec\": 4.863157575004152,\n  \"committed_row_count_verified\": 64000,\n  \"uncommitted_update_rolled_back\": true,\n  \"large_delete_rollback\": true,\n  \"first_container_OOM\": false,\n  \"second_container_OOM\": false\n}",
+      "artifact_sha256": "c8d015bfae736387d7e05f719d2f7ea7d9e5742932636364047dcfae38882bca"
+    }
+  ],
+  "retrospective": [
+    {
+      "source": "agent",
+      "content": "??20?????????????????29????1??128?1000????????1.0?????RSS????cgroup???????????????????"
+    },
+    {
+      "source": "agent",
+      "content": "??2GiB???????2.24GB???????????????????????????????????????????????"
+    }
+  ],
+  "limitations": [
+    {
+      "source": "scope_note",
+      "content": "The user did not provide a technical prediction, a database design, or an independent interpretation of experimental outcomes. Those contributions are not fabricated. Agent work and tool outputs must not be attributed to the student."
+    },
+    {
+      "source": "scope_note",
+      "content": "Only selected task-relevant user instructions are retained; this is not the full earlier contest chat archive. No passwords, access tokens, browser cookies, or model service keys are included."
+    },
+    {
+      "source": "agent",
+      "content": "Known exclusions:NULL,JOIN,aggregation,subqueries,ALTER,foreign keys,nested transactions,primary-key update,general arithmetic expressions; exact flat index used for ann mode. Full formal score and ranking are pending."
+    }
+  ]
+}

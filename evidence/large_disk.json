@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "scope": "Actual network-none readonly-root Docker2CPU2GiB/no-swap128PID; >memory database with real SIGKILL and restart",
+  "rows": 64000,
+  "payload_chars": 35000,
+  "committed_wal_bytes": 2241876675,
+  "container_memory_limit_bytes": 2147483648,
+  "data_exceeds_memory": true,
+  "write_sec": 47.7957743149891,
+  "recovery_sec": 4.863157575004152,
+  "committed_row_count_verified": 64000,
+  "uncommitted_update_rolled_back": true,
+  "large_delete_rollback": true,
+  "first_container_OOM": false,
+  "second_container_OOM": false
+}

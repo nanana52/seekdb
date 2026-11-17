@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "scope": "independent deterministic Python state oracle and actual process-kill tests",
+  "seed": 817311,
+  "topk_comparisons": 800,
+  "transaction_epochs": 7,
+  "committed_then_SIGKILL": true,
+  "uncommitted_SIGKILL_rollback": true,
+  "partial_tail_recovery_idempotent": true,
+  "recovery_interrupted_repeatedly": 6,
+  "bigint_exact": true,
+  "float32_exact_storage": true,
+  "transaction_flat_index_relocation": true,
+  "invalid_vector_statement_atomicity": true
+}

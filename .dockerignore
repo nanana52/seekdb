@@ -1,0 +1,6 @@
+build/
+protocol-results/
+validation-results/
+.git/
+__pycache__/
+*.pyc
