@@ -35,6 +35,7 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    output_required_ = param.output_required_;
   }
   return ret;
 }
@@ -76,6 +77,26 @@ int ObTextDaaTIter::pre_process()
     }
   }
   return ret;
+}
+
+int ObTextDaaTIter::cache_result(int64_t &count, const ObDatum &id_datum, const double relevance)
+{
+  if (output_required_) {
+    return ObSRDaaTIterImpl::cache_result(count, id_datum, relevance);
+  }
+  // Only row cardinality is consumed above this iterator. The normal merge
+  // has already performed all reads, duplicate elimination and predicates.
+  const common::ObLimitParam *limit = iter_param_->limit_param_;
+  ++input_row_cnt_;
+  if (limit->is_valid() && input_row_cnt_ <= limit->offset_) { return OB_SUCCESS; }
+  ++count;
+  ++output_row_cnt_;
+  return limit->is_valid() && output_row_cnt_ >= limit->limit_ ? OB_ITER_END : OB_SUCCESS;
+}
+
+int ObTextDaaTIter::project_results(const int64_t count)
+{
+  return output_required_ ? ObSRDaaTIterImpl::project_results(count) : OB_SUCCESS;
 }
 
 ObTextBMWIter::ObTextBMWIter()

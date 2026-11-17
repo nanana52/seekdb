@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "output_required": false,
+  "query": "COUNT actual indexed membership",
+  "result": 11000,
+  "source": "gdb exactcandidate runtimeflag plus actualSQL"
+}

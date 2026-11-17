@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "queries_per_variant": 39,
+  "scope": "COUNTstarCOUNT1SUM1projectionconstantLIMITOFFSETemptyNULLgroupnumericprojectionextrafilterbooleanNOTdoubleMATCH; exactbeforeafteranswers",
+  "DML_oracle": {
+    "status": "PASS",
+    "checks": 96,
+    "docs": 140,
+    "scope": "Independent Python token-set oracle for actual BENG bulk index; varying text1..1200words; caseemptyNULL; update/delete; transaction rollback"
+  }
+}

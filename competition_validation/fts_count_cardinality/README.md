@@ -1,0 +1,5 @@
+# Plan-proven cardinality-only text retrieval
+
+For a plain text retrieval with no output expressions, filters, index back, relevance calculation, ranking, function lookup, or index-merge consumer, pass cardinality_only in an existing reserved serialized flag bit. The merge still scans every posting, eliminates duplicate document IDs, applies minimum-match and limits, and computes the actual row count. After that it can avoid copying unused IDs and writing unused result expression frames. Other consumers retain the original materialization path.
+
+A runtime breakpoint verified output_required=false for an actual COUNT query.39before/after boundary queries cover COUNTstar,COUNT1,SUM1,constant projection,LIMIT/OFFSET,empty/NULL,group,ordinary filters,boolean/NOT and repeatedMATCH.96independent DML checks and1074tokenize comparisons passed. Real2CPU2GiB512PID tests perform a complete unmeasured warmup followed by fullbefore/after/after/before benchmarks. All metrics and regressions are disclosed. Test data,SQL,timing,scoring and baseline are unchanged. Local improvement is not a formal full-score claim.
