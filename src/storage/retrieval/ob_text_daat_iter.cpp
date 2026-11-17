@@ -35,6 +35,8 @@ int ObTextDaaTIter::init(const ObTextDaaTParam &param)
   } else {
     mode_flag_ = param.mode_flag_;
     function_lookup_mode_ = param.function_lookup_mode_;
+    output_required_ = param.output_required_;
+    minimum_should_match_ = param.minimum_should_match_;
   }
   return ret;
 }
@@ -76,6 +78,111 @@ int ObTextDaaTIter::pre_process()
     }
   }
   return ret;
+}
+
+int ObTextDaaTIter::fill_merge_heap()
+{
+  if (output_required_ || dim_iters_->count() > ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
+    return ObSRDaaTIterImpl::fill_merge_heap();
+  }
+  int ret = OB_SUCCESS;
+  ObSRSimpleMerger *heap = static_cast<ObSRSimpleMerger *>(merge_heap_);
+  ObISRDaaTDimIter *const *dims = dim_iters_->get_data();
+  const int64_t *next = next_round_iter_idxes_.get_data();
+  const ObDatum **ids = iter_domain_ids_.get_data();
+  for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
+    const int64_t idx = next[i];
+    ObTextRetrievalDaaTTokenIter *dim = static_cast<ObTextRetrievalDaaTTokenIter *>(dims[idx]);
+    ObSRMergeItem item;
+    if (OB_ISNULL(dim)) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_next_row())) {
+      if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+    } else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_curr_id(ids[idx]))) {
+    } else {
+      item.iter_idx_ = idx;
+      // This plan returns cardinality only. Scores and boost products have
+      // no consumer; minimum matched dimensions are checked independently.
+      item.relevance_ = 0.0;
+      ret = heap->ObSRSimpleMerger::push(item);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (heap->ObSRSimpleMerger::empty()) { ret = OB_ITER_END; }
+    else { next_round_cnt_ = 0; }
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::collect_dims_by_id(const ObDatum *&id_datum,
+    double &relevance, bool &got_valid_id)
+{
+  if (output_required_) {
+    return ObSRDaaTIterImpl::collect_dims_by_id(id_datum, relevance, got_valid_id);
+  }
+  int ret = OB_SUCCESS;
+  int64_t matched_count = 0;
+  int64_t last_iter = 0;
+  bool document_complete = false;
+  const ObSRMergeItem *item = nullptr;
+  if (dim_iters_->count() <= ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
+    ObSRSimpleMerger *heap = static_cast<ObSRSimpleMerger *>(merge_heap_);
+    while (OB_SUCC(ret) && !heap->ObSRSimpleMerger::empty() && !document_complete) {
+      document_complete = heap->ObSRSimpleMerger::is_unique_champion();
+      if (OB_FAIL(heap->ObSRSimpleMerger::top(item))) {
+      } else {
+        last_iter = item->iter_idx_;
+        if (OB_FAIL(heap->ObSRSimpleMerger::pop())) {
+        } else {
+          next_round_iter_idxes_[next_round_cnt_++] = last_iter;
+          ++matched_count;
+        }
+      }
+    }
+  } else {
+    while (OB_SUCC(ret) && !merge_heap_->empty() && !document_complete) {
+      document_complete = merge_heap_->is_unique_champion();
+      if (OB_FAIL(merge_heap_->top(item))) {
+      } else {
+        last_iter = item->iter_idx_;
+        if (OB_FAIL(merge_heap_->pop())) {
+        } else {
+          next_round_iter_idxes_[next_round_cnt_++] = last_iter;
+          ++matched_count;
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    id_datum = iter_domain_ids_[last_iter];
+    if (OB_ISNULL(id_datum)) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      // No relevance value can escape this plan. Preserve the same minimum
+      // matched-dimension predicate without computing an unused inner product.
+      relevance = 0.0;
+      got_valid_id = matched_count >= minimum_should_match_;
+    }
+  }
+  return ret;
+}
+
+int ObTextDaaTIter::cache_result(int64_t &count, const ObDatum &id_datum, const double relevance)
+{
+  if (output_required_) {
+    return ObSRDaaTIterImpl::cache_result(count, id_datum, relevance);
+  }
+  // Only row cardinality is consumed above this iterator. The normal merge
+  // has already performed all reads, duplicate elimination and predicates.
+  const common::ObLimitParam *limit = iter_param_->limit_param_;
+  ++input_row_cnt_;
+  if (limit->is_valid() && input_row_cnt_ <= limit->offset_) { return OB_SUCCESS; }
+  ++count;
+  ++output_row_cnt_;
+  return limit->is_valid() && output_row_cnt_ >= limit->limit_ ? OB_ITER_END : OB_SUCCESS;
+}
+
+int ObTextDaaTIter::project_results(const int64_t count)
+{
+  return output_required_ ? ObSRDaaTIterImpl::project_results(count) : OB_SUCCESS;
 }
 
 ObTextBMWIter::ObTextBMWIter()

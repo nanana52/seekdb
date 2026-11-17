@@ -1913,6 +1913,15 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
         }
       }
       index_back_doc_id_column = ir_scan_ctdef->inv_scan_domain_id_col_;
+      // Only cardinality is consumed by the parent of this plain retrieval.
+      // Internal posting IDs remain necessary for the merge but need not be
+      // copied into result expression frames after duplicate elimination.
+      ir_scan_ctdef->cardinality_only_ = op.get_output_exprs().empty() &&
+          op.get_filter_exprs().empty() && !op.get_index_back() &&
+          !scan_ctdef.is_index_merge_ && !cg_ctx.is_func_lookup_ &&
+          !cg_ctx.is_vec_iter_func_lookup_ && !cg_ctx.is_es_match_ &&
+          !cg_ctx.is_merge_fts_index_ && !tr_info.need_calc_relevance_ &&
+          !tr_info.need_sort();
     }
   }
 
