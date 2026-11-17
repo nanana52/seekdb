@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_ddl_task_executor.h"
 #include "lib/ob_running_mode.h"
+#include "lib/cpu/ob_cpu_topology.h"
+#include "lib/utility/utility.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_server_runtime.h"
@@ -350,7 +353,15 @@ int ObDDLLocalBuilder::push_task(ObAsyncTask &task)
 
 int64_t ObDDLLocalBuilder::get_thread_cnt_() const
 {
-  return lib::is_mini_mode() ? 1 : 16;
+  if (!lib::is_mini_mode()) { return 16; }
+  // Independent domain-index auxiliary builds can overlap on a small server.
+  // Retain the serial path when the CPU or memory budget cannot sustain it.
+  const int64_t memory_budget = lib::ObRunningModeConfig::instance().memory_budget_;
+  const int64_t configured_cpus = config::cpu_count();
+  const int64_t available_cpus = configured_cpus > 0 ? configured_cpus : common::get_cpu_count();
+  return available_cpus >= 2 && memory_budget >= 1LL * 1024 * 1024 * 1024 &&
+                 common::get_effective_memory_size() >= 2LL * 1024 * 1024 * 1024
+             ? 2 : 1;
 }
 
 }  // end namespace share
