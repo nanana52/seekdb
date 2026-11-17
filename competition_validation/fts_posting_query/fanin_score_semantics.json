@@ -1,0 +1,5 @@
+{
+  "status": "PASS",
+  "queries": 28,
+  "scope": "1..8term textDaaT fanin including generic loser-tree fallback; exact score minmaxsum; booleanmustprohibit; ranktiesID; LIMITOFFSET; scorethreshold; NOT; group"
+}

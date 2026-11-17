@@ -26,6 +26,7 @@ namespace storage
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    binary_string_id_(false),
     is_inited_(false)
 {
 }
@@ -39,6 +40,8 @@ int ObSRMergeCmp::init(
     ret = OB_ERR_UNEXPECTED;
   } else {
     iter_ids_ = iter_ids;
+    binary_string_id_ = id_meta.type_ == common::ObVarcharType &&
+                        id_meta.cs_type_ == common::CS_TYPE_BINARY;
     common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
@@ -60,8 +63,17 @@ int ObSRMergeCmp::cmp(
     ret = OB_NOT_INIT;
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(
-            get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret, nullptr))) {
+    const ObDatum &left = get_id_datum(l.iter_idx_);
+    const ObDatum &right = get_id_datum(r.iter_idx_);
+    // Binary collation compares all bytes, including trailing spaces. Match
+    // its exact ordering directly; null and other collations keep the generic
+    // comparator selected from datum metadata.
+    if (binary_string_id_ && !left.is_null() && !right.is_null()) {
+      const int64_t length = MIN(left.len_, right.len_);
+      tmp_ret = length == 0 ? 0 : MEMCMP(left.ptr_, right.ptr_, length);
+      cmp_ret = tmp_ret != 0 ? (tmp_ret < 0 ? -1 : 1)
+                            : (left.len_ < right.len_ ? -1 : (left.len_ > right.len_ ? 1 : 0));
+    } else if (OB_FAIL(cmp_func_(left, right, tmp_ret, nullptr))) {
     } else {
       cmp_ret = tmp_ret;
     }

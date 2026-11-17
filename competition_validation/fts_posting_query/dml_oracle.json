@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "checks": 96,
+  "docs": 140,
+  "scope": "Independent Python token-set oracle for actual BENG bulk index; varying text1..1200words; caseemptyNULL; update/delete; transaction rollback",
+  "verified_executable": "/opt/oceanbase_completion_20261116/fts_binary_compare/seekdb_candidate"
+}

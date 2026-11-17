@@ -78,6 +78,44 @@ int ObTextDaaTIter::pre_process()
   return ret;
 }
 
+int ObTextDaaTIter::fill_merge_heap()
+{
+  // Text DaaT owns final token iterators (also used by reset/reuse). Preserve
+  // the generic merge for larger fan-ins; remove repeated virtual dispatch
+  // only for the existing bounded simple merger.
+  if (dim_iters_->count() > ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
+    return ObSRDaaTIterImpl::fill_merge_heap();
+  }
+  int ret = OB_SUCCESS;
+  ObSRSimpleMerger *heap = static_cast<ObSRSimpleMerger *>(merge_heap_);
+  ObISRDaaTDimIter *const *dims = dim_iters_->get_data();
+  const int64_t *next = next_round_iter_idxes_.get_data();
+  const ObDatum **ids = iter_domain_ids_.get_data();
+  const double *weights = iter_param_->dim_weights_ == nullptr
+      ? nullptr : iter_param_->dim_weights_->get_data();
+  for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
+    const int64_t idx = next[i];
+    ObTextRetrievalDaaTTokenIter *dim = static_cast<ObTextRetrievalDaaTTokenIter *>(dims[idx]);
+    ObSRMergeItem item;
+    if (OB_ISNULL(dim)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_next_row())) {
+      if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+    } else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_curr_score(item.relevance_))) {
+    } else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_curr_id(ids[idx]))) {
+    } else {
+      item.iter_idx_ = idx;
+      if (weights != nullptr) { item.relevance_ = item.relevance_ * iter_param_->field_boost_ * weights[idx]; }
+      ret = heap->ObSRSimpleMerger::push(item);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (heap->ObSRSimpleMerger::empty()) { ret = OB_ITER_END; }
+    else { next_round_cnt_ = 0; }
+  }
+  return ret;
+}
+
 ObTextBMWIter::ObTextBMWIter()
   : ObSRBMWIterImpl(),
     bm25_param_estimator_() {}
