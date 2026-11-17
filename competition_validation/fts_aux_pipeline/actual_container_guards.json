@@ -1,0 +1,53 @@
+{
+  "status": "PASS",
+  "profiles": [
+    {
+      "memory": "2g",
+      "configured_cpu_count": 1,
+      "actual_cpu_quota": 1000000000,
+      "memory_limit_bytes": 2147483648,
+      "actual_ddl_workers": 1,
+      "observed_fulltext_DOP": 1,
+      "normal_unique_fulltext_rollback": "PASS",
+      "OOMKilled": false,
+      "cgroup_memory_peak_bytes": "252362752",
+      "seconds": 6.9126329319988145
+    },
+    {
+      "memory": "1536m",
+      "configured_cpu_count": 4,
+      "actual_cpu_quota": 4000000000,
+      "memory_limit_bytes": 1610612736,
+      "actual_ddl_workers": 1,
+      "observed_fulltext_DOP": 1,
+      "normal_unique_fulltext_rollback": "PASS",
+      "OOMKilled": false,
+      "cgroup_memory_peak_bytes": "246546432",
+      "seconds": 5.441690829989966
+    },
+    {
+      "memory": "2g",
+      "configured_cpu_count": 2,
+      "actual_cpu_quota": 2000000000,
+      "memory_limit_bytes": 2147483648,
+      "actual_ddl_workers": 2,
+      "observed_fulltext_DOP": 1,
+      "normal_unique_fulltext_rollback": "PASS",
+      "OOMKilled": false,
+      "cgroup_memory_peak_bytes": "245313536",
+      "seconds": 5.656030853002449
+    },
+    {
+      "memory": "2g",
+      "configured_cpu_count": 4,
+      "actual_cpu_quota": 4000000000,
+      "memory_limit_bytes": 2147483648,
+      "actual_ddl_workers": 2,
+      "observed_fulltext_DOP": 2,
+      "normal_unique_fulltext_rollback": "PASS",
+      "OOMKilled": false,
+      "cgroup_memory_peak_bytes": "248455168",
+      "seconds": 5.537478801008547
+    }
+  ]
+}

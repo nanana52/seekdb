@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX RS
 
 #include "config_bridge.h"
+#include "lib/cpu/ob_cpu_topology.h"
+#include "lib/ob_running_mode.h"
+#include "lib/utility/utility.h"
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
@@ -663,6 +666,19 @@ int ObFtsIndexBuildTask::construct_create_index_arg(
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
+  }
+  // Preserve parent and rowkey/document-id generation. Only independent
+  // inverted/document-word tasks receive the bounded scan/sort workers.
+  if (OB_SUCC(ret) && is_fts_task() &&
+      (INDEX_TYPE_FTS_INDEX_LOCAL == index_type ||
+       INDEX_TYPE_FTS_DOC_WORD_LOCAL == index_type)) {
+    const int64_t configured_cpus = config::cpu_count();
+    const int64_t cpus = configured_cpus > 0 ? configured_cpus : common::get_cpu_count();
+    const int64_t budget = lib::ObRunningModeConfig::instance().memory_budget_;
+    if (cpus >= 4 && budget >= (1LL << 30) &&
+        common::get_effective_memory_size() >= (2LL << 30)) {
+      arg.parallelism_ = MAX(arg.parallelism_, 2L);
+    }
   }
   return ret;
 }

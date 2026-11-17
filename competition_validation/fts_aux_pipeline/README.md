@@ -1,0 +1,5 @@
+# Resource-bounded FTS scan/sort pipeline parallelism
+
+Only after constructing each FTS inverted/document-word auxiliary task argument, raise its scan/sort DOP to at least2 when configured/detected CPUs>=4, effective physical/cgroup memory>=2GiB and logical memory budget>=1GiB. Keep the parent, initial rowkey/document-ID assignment and shared decide_parallelism rules unchanged. Retain original DOP on1CPU,2CPU or1.5GiB. This preserves exact TopK tie membership, including documentID assignment. This does not change testSQL,data,timing,baseline,scoring or Docker limits.
+
+Actual profiles inspect kernelDdlBuild worker names and emitted internalDDL parallel(N) statements. Ordinary/unique/fulltext indexes,duplicate rejection and rollback passed in all profiles.39query-boundary+96DMLoracle+1074tokenize comparisons passed. Actual4CPU2GiB512PID full benchmarks include an unmeasured complete warmup followed bybefore/after/after/before. Reference is the40.661formal build; candidate includes the validated cardinality-only posting query hot path. All9metrics and regressions are disclosed, with no source sort-key experiment. Local speedups are not formal contest points.
