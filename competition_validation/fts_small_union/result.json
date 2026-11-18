@@ -1,0 +1,1 @@
+{"status": "PASS", "baseline_binary": "/opt/oceanbase_completion_20261116/fts_count_hotloop/seekdb_candidate", "candidate_binary": "/opt/oceanbase_completion_20261116/fts_small_union/seekdb_candidate", "same_official_benchmark": true}

@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "scope": "1to15terms;duplicatesunknown;COUNT/SUM;offsetlimit;extraSQLfilter;DMLrollback;comparebeforeafteractual2CPU2GiB",
+  "phases": [
+    {
+      "variant": "before",
+      "checks": 405
+    },
+    {
+      "variant": "after",
+      "checks": 405
+    }
+  ]
+}

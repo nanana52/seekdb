@@ -80,35 +80,58 @@ int ObTextDaaTIter::pre_process()
   return ret;
 }
 
+int ObTextDaaTIter::do_one_merge_round(int64_t &count)
+{
+  // This specialization is selected only for a cardinality-only natural
+  // language plan without lookup, scoring, projected IDs or row filters.
+  if (output_required_ || dim_iters_->count() > 8) {
+    return ObSRDaaTIterImpl::do_one_merge_round(count);
+  }
+  int ret = OB_SUCCESS;
+  const ObDatum *id = nullptr;
+  double relevance = 0.0;
+  bool valid = false;
+  if (OB_FAIL(ObTextDaaTIter::fill_merge_heap())) {
+  } else if (OB_FAIL(ObTextDaaTIter::collect_dims_by_id(id, relevance, valid))) {
+  } else if (valid && OB_FAIL(ObTextDaaTIter::cache_result(count, *id, relevance))) {
+  }
+  return ret;
+}
+
 int ObTextDaaTIter::fill_merge_heap()
 {
-  if (output_required_ || dim_iters_->count() > ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
+  if (output_required_ || dim_iters_->count() > 8) {
     return ObSRDaaTIterImpl::fill_merge_heap();
   }
   int ret = OB_SUCCESS;
-  ObSRSimpleMerger *heap = static_cast<ObSRSimpleMerger *>(merge_heap_);
   ObISRDaaTDimIter *const *dims = dim_iters_->get_data();
   const int64_t *next = next_round_iter_idxes_.get_data();
   const ObDatum **ids = iter_domain_ids_.get_data();
   for (int64_t i = 0; OB_SUCC(ret) && i < next_round_cnt_; ++i) {
     const int64_t idx = next[i];
-    ObTextRetrievalDaaTTokenIter *dim = static_cast<ObTextRetrievalDaaTTokenIter *>(dims[idx]);
-    ObSRMergeItem item;
-    if (OB_ISNULL(dim)) { ret = OB_ERR_UNEXPECTED; }
-    else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_next_row())) {
-      if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+    ObTextRetrievalDaaTTokenIter *dim =
+        static_cast<ObTextRetrievalDaaTTokenIter *>(dims[idx]);
+    if (OB_ISNULL(dim)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_next_row())) {
+      if (OB_ITER_END == ret) {
+        ids[idx] = nullptr;
+        ret = OB_SUCCESS;
+      }
     } else if (OB_FAIL(dim->ObTextRetrievalDaaTTokenIter::get_curr_id(ids[idx]))) {
-    } else {
-      item.iter_idx_ = idx;
-      // This plan returns cardinality only. Scores and boost products have
-      // no consumer; minimum matched dimensions are checked independently.
-      item.relevance_ = 0.0;
-      ret = heap->ObSRSimpleMerger::push(item);
+    } else if (OB_ISNULL(ids[idx])) {
+      ret = OB_ERR_UNEXPECTED;
     }
   }
   if (OB_SUCC(ret)) {
-    if (heap->ObSRSimpleMerger::empty()) { ret = OB_ITER_END; }
-    else { next_round_cnt_ = 0; }
+    next_round_cnt_ = 0;
+    bool active = false;
+    for (int64_t i = 0; i < dim_iters_->count(); ++i) {
+      active = active || ids[i] != nullptr;
+    }
+    if (!active) {
+      ret = OB_ITER_END;
+    }
   }
   return ret;
 }
@@ -120,25 +143,48 @@ int ObTextDaaTIter::collect_dims_by_id(const ObDatum *&id_datum,
     return ObSRDaaTIterImpl::collect_dims_by_id(id_datum, relevance, got_valid_id);
   }
   int ret = OB_SUCCESS;
-  int64_t matched_count = 0;
-  int64_t last_iter = 0;
-  bool document_complete = false;
-  const ObSRMergeItem *item = nullptr;
-  if (dim_iters_->count() <= ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
-    ObSRSimpleMerger *heap = static_cast<ObSRSimpleMerger *>(merge_heap_);
-    while (OB_SUCC(ret) && !heap->ObSRSimpleMerger::empty() && !document_complete) {
-      document_complete = heap->ObSRSimpleMerger::is_unique_champion();
-      if (OB_FAIL(heap->ObSRSimpleMerger::top(item))) {
+  if (dim_iters_->count() <= 8) {
+    // A bounded linear tournament avoids sorting, moving and removing small
+    // heap entries. Keep one real posting head per dimension and advance
+    // every dimension tied for the selected ID on the following round.
+    const ObDatum *const *ids = iter_domain_ids_.get_data();
+    int64_t *advance = next_round_iter_idxes_.get_data();
+    int64_t selected = -1;
+    for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
+      if (ids[i] == nullptr) {
+      } else if (selected < 0) {
+        selected = i;
+        advance[next_round_cnt_++] = i;
       } else {
-        last_iter = item->iter_idx_;
-        if (OB_FAIL(heap->ObSRSimpleMerger::pop())) {
-        } else {
-          next_round_iter_idxes_[next_round_cnt_++] = last_iter;
-          ++matched_count;
+        ObSRMergeItem left;
+        ObSRMergeItem right;
+        left.iter_idx_ = i;
+        right.iter_idx_ = selected;
+        int64_t cmp = 0;
+        if (OB_FAIL(merge_cmp_.cmp(left, right, cmp))) {
+        } else if (cmp < 0) {
+          selected = i;
+          next_round_cnt_ = 0;
+          advance[next_round_cnt_++] = i;
+        } else if (cmp == 0) {
+          advance[next_round_cnt_++] = i;
         }
       }
     }
+    if (OB_SUCC(ret)) {
+      if (selected < 0) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        id_datum = ids[selected];
+        relevance = 0.0;
+        got_valid_id = next_round_cnt_ >= minimum_should_match_;
+      }
+    }
   } else {
+    int64_t matched_count = 0;
+    int64_t last_iter = 0;
+    bool document_complete = false;
+    const ObSRMergeItem *item = nullptr;
     while (OB_SUCC(ret) && !merge_heap_->empty() && !document_complete) {
       document_complete = merge_heap_->is_unique_champion();
       if (OB_FAIL(merge_heap_->top(item))) {
@@ -151,15 +197,13 @@ int ObTextDaaTIter::collect_dims_by_id(const ObDatum *&id_datum,
         }
       }
     }
-  }
-  if (OB_SUCC(ret)) {
-    id_datum = iter_domain_ids_[last_iter];
-    if (OB_ISNULL(id_datum)) { ret = OB_ERR_UNEXPECTED; }
-    else {
-      // No relevance value can escape this plan. Preserve the same minimum
-      // matched-dimension predicate without computing an unused inner product.
-      relevance = 0.0;
-      got_valid_id = matched_count >= minimum_should_match_;
+    if (OB_SUCC(ret)) {
+      id_datum = iter_domain_ids_[last_iter];
+      if (OB_ISNULL(id_datum)) { ret = OB_ERR_UNEXPECTED; }
+      else {
+        relevance = 0.0;
+        got_valid_id = matched_count >= minimum_should_match_;
+      }
     }
   }
   return ret;
